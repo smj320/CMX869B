@@ -29,31 +29,33 @@ HAL_StatusTypeDef reg_read(uint8_t reg, uint16_t *data) {
     return (rc);
 }
 
+/**
+ * こちらがキャリアを待機する。。地上側、D3のジャンパをクローズ。
+ * @return
+ */
 int cmx869b_init_Call() {
     static HAL_StatusTypeDef rc;
-    uint16_t data;
-    rc = reg_write(0x01, 0x00, 0x00);
-    rc = reg_write(0xE0, 0x01, 0x40);
-    rc = reg_write(0xE1, 0xF0, 0x16);
-    rc = reg_write(0xE3, 0xF0, 0x36);
-    rc = reg_write(0xEA, 0x00, 0x1F);
-    rc = reg_read(0xEB, &data);
-    rc = reg_write(0xE4, 0x00, 0x42);
-    rc = reg_read(0xE5, &data);
+    rc = reg_write(0x01, 0x00, 0x00);   //RESET
+    rc = reg_write(0xE0, 0x21, 0x00);   //GRE
+    rc = reg_write(0xE1, 0xFE, 0x76);   //TX_REG
+    rc = reg_write(0xE2, 0xFE, 0xF6);   //RX_REG
+    rc = reg_write(0xEA, 0x00, 0x17);   //QAM_REG
+    //ハンドシェーク完了を待機
     return (0);
 }
 
+/**
+ * こちらがキャリアを出す。ドリル側、D3のジャンパをオープン。
+ * @return
+ */
 int cmx869b_init_Answer() {
     static HAL_StatusTypeDef rc;
-    uint16_t data;
-    rc = reg_write(0x01, 0x00, 0x00);
-    rc = reg_write(0xE0, 0x01, 0x40);
-    rc = reg_write(0xE1, 0xF0, 0x16);
-    rc = reg_write(0xE3, 0xF0, 0x36);
-    rc = reg_write(0xEA, 0x00, 0x1F);
-    rc = reg_read(0xEB, &data);
-    rc = reg_write(0xE4, 0x00, 0x42);
-    rc = reg_read(0xE5, &data);
+    rc = reg_write(0x01, 0x00, 0x00);   //RESET
+    rc = reg_write(0xE0, 0x21, 0x00);   //GRE
+    rc = reg_write(0xE1, 0xFE, 0x76);   //TX_REG
+    rc = reg_write(0xE2, 0xFE, 0xF6);   //RX_REG
+    rc = reg_write(0xEA, 0x00, 0x1F);   //QAM_REG
+    //ハンドシェーク完了を待機
     return (0);
 }
 

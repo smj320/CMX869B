@@ -28,6 +28,19 @@ HAL_StatusTypeDef reg_read(uint8_t reg, uint16_t *data) {
     *data = pRxData[1]<<8 | pRxData[2];
     return (rc);
 }
+/**
+ * ５秒間20Hz(50msec)のRINGパルスを送る
+ */
+ void cmx869b_ring()
+{
+     int i;
+     for(i=0;i<50;i++){
+         HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_SET);
+         HAL_Delay(25);
+         HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
+         HAL_Delay(25);
+     }
+}
 
 /**
  * こちらがキャリアを待機する。。地上側、D3のジャンパをクローズ。
@@ -37,6 +50,7 @@ int cmx869b_init_Call() {
     static HAL_StatusTypeDef rc;
     rc = reg_write(0x01, 0x00, 0x00);   //RESET
     rc = reg_write(0xE0, 0x21, 0x00);   //GRE
+    cmx869b_ring();
     rc = reg_write(0xE1, 0xFE, 0x76);   //TX_REG
     rc = reg_write(0xE2, 0xFE, 0xF6);   //RX_REG
     rc = reg_write(0xEA, 0x00, 0x17);   //QAM_REG

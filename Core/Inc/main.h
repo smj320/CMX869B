@@ -65,8 +65,10 @@ void Error_Handler(void);
 #define MODEM_INT_GPIO_Port GPIOA
 #define MODEM_CS_Pin GPIO_PIN_4
 #define MODEM_CS_GPIO_Port GPIOA
-#define MODEM_MODE_Pin GPIO_PIN_0
-#define MODEM_MODE_GPIO_Port GPIOB
+#define MODEM_RING_Pin GPIO_PIN_0
+#define MODEM_RING_GPIO_Port GPIOB
+#define MODEM_MODE_Pin GPIO_PIN_12
+#define MODEM_MODE_GPIO_Port GPIOA
 #define SWDIO_Pin GPIO_PIN_13
 #define SWDIO_GPIO_Port GPIOA
 #define SWCLK_Pin GPIO_PIN_14

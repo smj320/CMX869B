@@ -73,7 +73,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+    uint8_t TxData, RxData;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -98,18 +98,45 @@ int main(void)
   MX_SPI1_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  CMX869B_Init();
+    CMX869B_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-      //GPIOがCalling(地上)なら
+  int p=0;
+    if (CMX869B_is_gse()) {
+        while (1) {
+            //ドリルなら、モデムにデータを投げてみる
+#ifdef _MODE_LOOP
+            TxData = 'K'+(p++);
+            CMX869B_Transmit(TxData);
+            HAL_Delay(50);
+            if (CMX869B_Receive(&RxData)==1) {
+                HAL_UART_Transmit(&huart2, &RxData, 1, 1000);
+                if(p>8) p=0;
+            }
+            HAL_Delay(200);
+#endif
+        }
+    } else {
+        while (1) {
+#ifdef _MODE_LOOP
+            //ループバックッモードなら、データを投げてみる。
+            TxData = 'K';
+            CMX869B_Transmit(TxData);
+            HAL_Delay(100);
+#endif
+            //GSEなら、モデムにデータが来ていたらホストに投げる
+            if (CMX869B_Receive(&RxData)) {
+                HAL_UART_Transmit(&huart2, &RxData, 1, 1000);
+            }
+            HAL_Delay(1000);
+        }
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-  }
+    }
   /* USER CODE END 3 */
 }
 
@@ -227,7 +254,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -260,7 +287,7 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 38400;
+  huart2.Init.BaudRate = 2400;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
@@ -324,7 +351,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : MODEM_MODE_Pin */
   GPIO_InitStruct.Pin = MODEM_MODE_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(MODEM_MODE_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
@@ -342,11 +369,10 @@ static void MX_GPIO_Init(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
-  __disable_irq();
-  while (1)
-  {
-  }
+    /* User can add his own implementation to report the HAL error return state */
+    __disable_irq();
+    while (1) {
+    }
   /* USER CODE END Error_Handler_Debug */
 }
 

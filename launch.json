@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "request": "launch",
+            "name": "OpenOCD-Debug",
+            "executable": "${/Users/kikuchi/Projects/CLionProjects/CMX869B/cmake-build-debug}",
+            "configFiles": [
+                "st_nucleo_f3.cfg"
+            ],
+            "cwd": "${workspaceRoot}",
+            "gdbpath": "arm-none-eabi-gdb"
+        }
+    ]
+}

@@ -1,0 +1,22 @@
+{
+    // IntelliSense を使用して利用可能な属性を学べます。
+    // 既存の属性の説明をホバーして表示します。
+    // 詳細情報は次を確認してください: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+          {
+            "cwd": "${workspaceRoot}",
+            "executable": "./cmake-build-debug/CMX869B.elf",
+            "name": "Debug Microcontroller",
+            "device": "STM32F303",
+            "runToMain": true,
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "miDebuggerServerAddress": "localhost:3333",
+            "configFiles": [
+                "./st_nucleo_f3_1.cfg"
+            ],
+        }
+    ]
+}

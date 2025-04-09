@@ -12,3 +12,18 @@ HAL_GPIO_ReadPin()　== GPIO_RESET　0
 HAL_GPIO_ReadPin()　!= GPIO_RESET　1を含む0以外
 で判定する。
 
+## openocdのconfigパス
+
+/opt/homebrew/Cellar/open-ocd/0.12.0_1/share/openocd/scripts/interface/stlink.cfg
+
+```
+adapter driver hla
+hla_layout stlink
+hla_device_desc "ST-LINK"
+hla_vid_pid 0x0483 0x3744 0x0483 0x3748 0x0483 0x374b 0x0483 0x374d 0x0483 0x374e 0x0483 0x374f 0x0483 0x3752 0x0483 0x3753 0x0483 0x3754
+```
+とあるので、ここに
+```
+hla_serial 12345623498723497
+```
+とlsusbで確認したデバッガのシリアル番号を指定する。

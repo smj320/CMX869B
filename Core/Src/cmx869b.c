@@ -9,34 +9,23 @@ extern SPI_HandleTypeDef hspi1;
 HAL_StatusTypeDef reg_write(uint8_t reg, uint8_t data1, uint8_t data2, int nByte);
 HAL_StatusTypeDef reg_read(uint8_t reg, uint8_t *data1, uint8_t *data2, int nByte);
 
-#ifdef _MODE_LOOP
-int n_cmd = 4;
+int n_cmd = 6;
 uint8_t cmd_call[][3] = {
-        {0x01, 0x00, 0x00}, //RST
-        {0xE0, 0x29, 0x7F}, //GRE Loop
-        {0xE1, 0xBE, 0x76}, //TX Ans 1200ps
-        {0xE2, 0xB0, 0xF6}  //RX Ans 1200bps
+    {0x01, 0x00, 0x00},
+    {0xE0, 0x01, 0x40},
+    {0xE1, 0xF0, 0x16},
+    {0xE3, 0xF0, 0x36},
+    {0xEA, 0x00, 0x17},
+    {0xEB, 0xBC, 0x6F},
 };
 uint8_t cmd_ans[][3] = {
-        {0x01, 0x00, 0x00}, //RST
-        {0xE0, 0x29, 0x7F}, //GRE Loop
-        {0xE1, 0xAE, 0x76}, //TX Call 1200ps
-        {0xE2, 0xA0, 0xF6}  //RX Call 1200bps
+    {0x01, 0x00, 0x00},
+    {0xE0, 0x01, 0x40},
+    {0xE1, 0xF0, 0x16},
+    {0xE3, 0xF0, 0x36},
+    {0xEA, 0x00, 0x1F},
+    {0xEB, 0x4C, 0x04},
 };
-#else
-int n_cmd = 4;
-uint8_t cmd_call[][3] = {
-        {0x01, 0x00, 0x00}, //RST
-        {0xE0, 0x29, 0x7F}, //GRE Loop
-        {0xE1, 0xBE, 0x76}, //TX Ans 1200ps
-        {0xE2, 0xA0, 0xF6}  //RX Call 1200bps
-};
-uint8_t cmd_ans[][3] = {
-        {0x01, 0x00, 0x00}, //RST
-        {0xE0, 0x29, 0x7F}, //GRE Loop
-        {0xE1, 0xAE, 0x76}, //TX Ans 1200ps
-        {0xE2, 0xB0, 0xF6}  //RX Call 1200bps
-#endif
 
 void CMX869B_Init() {
     // 地上系は、ジャンパありでCali
@@ -53,7 +42,6 @@ void CMX869B_Init() {
         HAL_Delay(1);
     }
 }
-
 
 /**
  * SPIレジスタ書き込み
@@ -132,14 +120,13 @@ int CMX869B_Receive(uint8_t *rx_data) {
 int CMX869B_Transmit(uint8_t tx_data) {
     static HAL_StatusTypeDef rc;
     int tx_rdy;
-    int cnt=0;
+    int cnt = 0;
     uint8_t data1, data2;
     rc = reg_read(0xE6, &data1, &data2, 2);
     tx_rdy = ((data1 >> 4) & 0x01);
-    cnt=0;
-    while(tx_rdy != 1)
-    {
-        if(cnt++>1000) break;
+    cnt = 0;
+    while (tx_rdy != 1) {
+        if (cnt++ > 1000) break;
     }
     if (tx_rdy == 1) {
         rc = reg_write(0xE3, tx_data, 0, 1);
@@ -147,4 +134,3 @@ int CMX869B_Transmit(uint8_t tx_data) {
     }
     return (-1);
 }
-

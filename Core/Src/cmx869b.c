@@ -7,24 +7,23 @@
 extern SPI_HandleTypeDef hspi1;
 
 HAL_StatusTypeDef reg_write(uint8_t reg, uint8_t data1, uint8_t data2, int nByte);
+
 HAL_StatusTypeDef reg_read(uint8_t reg, uint8_t *data1, uint8_t *data2, int nByte);
 
-int n_cmd = 6;
+int n_cmd = 5;
 uint8_t cmd_call[][3] = {
     {0x01, 0x00, 0x00},
-    {0xE0, 0x01, 0x40},
-    {0xE1, 0xF0, 0x16},
-    {0xE3, 0xF0, 0x36},
-    {0xEA, 0x00, 0x17},
-    {0xEB, 0xBC, 0x6F},
+    {0xE0, 0xA3, 0x00},
+    {0xE1, 0xFE, 0x76},
+    {0xE2, 0xFE, 0xF7},
+    {0xEA, 0x00, 0x37},
 };
 uint8_t cmd_ans[][3] = {
     {0x01, 0x00, 0x00},
-    {0xE0, 0x01, 0x40},
-    {0xE1, 0xF0, 0x16},
-    {0xE3, 0xF0, 0x36},
-    {0xEA, 0x00, 0x1F},
-    {0xEB, 0x4C, 0x04},
+    {0xE0, 0xA3, 0x00},
+    {0xE1, 0xFE, 0x76},
+    {0xE2, 0xFE, 0xF7},
+    {0xEA, 0x00, 0x3F},
 };
 
 void CMX869B_Init() {
@@ -32,14 +31,34 @@ void CMX869B_Init() {
     // Drillは、ジャンパなしなでAns
     static HAL_StatusTypeDef rc;
     static uint8_t data1, data2;
-    static uint8_t cmd[3], RxData;
-    static int has_sig, has_rx;
+    static uint8_t RxData[2];
+    static int is_rdy;
     int isGse = CMX869B_is_gse();
 
-    for (int i = 0; i < n_cmd; i++) {
-        for (int j = 0; j < 3; j++) cmd[j] = isGse ? cmd_call[i][j] : cmd_ans[i][j];
-        rc = reg_write(cmd[0], cmd[1], cmd[2], 2);
-        HAL_Delay(1);
+    if (isGse) {
+        //CALL コマンド送出
+        for (int i = 0; i < n_cmd; i++) {
+            rc = reg_write(cmd_call[i][0], cmd_call[i][1], cmd_call[i][2], 2);
+            rc = reg_read(0xE6, &RxData[0], &RxData[1], 2);
+            rc = reg_read(0xEB, &RxData[0], &RxData[1], 2);
+            HAL_Delay(1);
+        }
+        //ハンドシェーク待機
+        do {
+            is_rdy = 0;
+            rc = reg_read(0xEB, &RxData[0], &RxData[1], 1);
+            is_rdy = 1;
+            HAL_Delay(1);
+        } while (is_rdy == 1);
+    } else {
+        //ANS コマンド送出
+        for (int i = 0; i < n_cmd; i++) {
+            rc = reg_write(cmd_ans[i][0], cmd_ans[i][1], cmd_ans[i][2], 2);
+            rc = reg_read(0xE6, &RxData[0], &RxData[1], 2);
+            rc = reg_read(0xEB, &RxData[0], &RxData[1], 2);
+            HAL_Delay(1);
+        }
+        //ハンドシェーク待機
     }
 }
 
@@ -82,11 +101,10 @@ HAL_StatusTypeDef reg_read(uint8_t reg, uint8_t *data1, uint8_t *data2, int nByt
     if (nByte == 1) {
         *data1 = pRxData[1];
         return (rc);
-    } else {
-        *data1 = pRxData[1];
-        *data2 = pRxData[2];
-        return (rc);
     }
+    *data1 = pRxData[1];
+    *data2 = pRxData[2];
+    return (rc);
 }
 
 int CMX869B_is_gse() {

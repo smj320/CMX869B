@@ -10,56 +10,41 @@ HAL_StatusTypeDef reg_write(uint8_t reg, uint8_t data1, uint8_t data2, int nByte
 
 HAL_StatusTypeDef reg_read(uint8_t reg, uint8_t *data1, uint8_t *data2, int nByte);
 
-int n_cmd = 5;
-uint8_t cmd_call[][3] = {
+#define CALL_QAM 0x37
+#define ANS_QAM 0x3F
+#define CALL_W_STAT 0xBC6F
+#define ANS_W_STAT 0x4C04
+#define N_CMD  5
+static uint8_t cmd[][3] = {
     {0x01, 0x00, 0x00},
     {0xE0, 0xA3, 0x00},
     {0xE1, 0xFE, 0x76},
     {0xE2, 0xFE, 0xF7},
-    {0xEA, 0x00, 0x37},
-};
-uint8_t cmd_ans[][3] = {
-    {0x01, 0x00, 0x00},
-    {0xE0, 0xA3, 0x00},
-    {0xE1, 0xFE, 0x76},
-    {0xE2, 0xFE, 0xF7},
-    {0xEA, 0x00, 0x3F},
+    {0xEA, 0x00, 0x00},
 };
 
 void CMX869B_Init() {
-    // 地上系は、ジャンパありでCali
-    // Drillは、ジャンパなしなでAns
+    // 地上系は、ジャンパありでCali, Drillは、ジャンパなしなでAns
     static HAL_StatusTypeDef rc;
     static uint8_t data1, data2;
-    static uint8_t RxData[2];
-    static int is_rdy;
-    int isGse = CMX869B_is_gse();
+    uint16_t qam_stat;
+    const int isGse = CMX869B_is_gse();
 
-    if (isGse) {
-        //CALL コマンド送出
-        for (int i = 0; i < n_cmd; i++) {
-            rc = reg_write(cmd_call[i][0], cmd_call[i][1], cmd_call[i][2], 2);
-            rc = reg_read(0xE6, &RxData[0], &RxData[1], 2);
-            rc = reg_read(0xEB, &RxData[0], &RxData[1], 2);
-            HAL_Delay(1);
-        }
-        //ハンドシェーク待機
-        do {
-            is_rdy = 0;
-            rc = reg_read(0xEB, &RxData[0], &RxData[1], 1);
-            is_rdy = 1;
-            HAL_Delay(1);
-        } while (is_rdy == 1);
-    } else {
-        //ANS コマンド送出
-        for (int i = 0; i < n_cmd; i++) {
-            rc = reg_write(cmd_ans[i][0], cmd_ans[i][1], cmd_ans[i][2], 2);
-            rc = reg_read(0xE6, &RxData[0], &RxData[1], 2);
-            rc = reg_read(0xEB, &RxData[0], &RxData[1], 2);
-            HAL_Delay(1);
-        }
-        //ハンドシェーク待機
+    //CALLかANSでコマンド分岐
+    cmd[N_CMD - 1][2] = isGse == 1 ? CALL_QAM : ANS_QAM;
+    uint16_t ack_code = isGse == 1 ? CALL_W_STAT : ANS_W_STAT;
+    //コマンド実行
+    for (int i = 0; i < N_CMD; i++) {
+        rc = reg_write(cmd[i][0], cmd[i][1], cmd[i][2], 2);
+        rc = reg_read(0xEB, &data1, &data2, 1);
+        HAL_Delay(1);
     }
+    //ハンドシェーク待機
+    do {
+        rc = reg_read(0xEB, &data1, &data2, 1);
+        qam_stat = (data1 << 8) + data2;
+        HAL_Delay(1);
+    } while (qam_stat != ack_code);
 }
 
 /**

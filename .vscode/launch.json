@@ -5,18 +5,17 @@
     "version": "0.2.0",
     "configurations": [
           {
+            "name": "Debug Microcontroller",
             "cwd": "${workspaceRoot}",
             "executable": "./cmake-build-debug/CMX869B.elf",
-            "name": "Debug Microcontroller",
             "device": "STM32F303",
-            "runToMain": true,
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",
-            "miDebuggerServerAddress": "localhost:3333",
             "configFiles": [
-                "./st_nucleo_f3_1.cfg"
+                "./st_nucleo_f3_1.cfg",
             ],
+            "runToEntryPoint": "main",
         }
     ]
 }

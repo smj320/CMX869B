@@ -27,3 +27,26 @@ hla_vid_pid 0x0483 0x3744 0x0483 0x3748 0x0483 0x374b 0x0483 0x374d 0x0483 0x374
 hla_serial 12345623498723497
 ```
 とlsusbで確認したデバッガのシリアル番号を指定する。
+
+## VCでのデバッグ
+設定は .vscode/launch.jsonに書く
+
+```angular2html
+    "version": "0.2.0",
+    "configurations": [
+          {
+            "cwd": "${workspaceRoot}",
+            "executable": "./cmake-build-debug/CMX869B.elf",
+            "name": "Debug Microcontroller",
+            "device": "STM32F303",
+            "runToMain": true,
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "gdbTarget": "localhost:3333",
+            "configFiles": [
+                "./st_nucleo_f3_1.cfg"
+            ],
+        }
+    ]
+```

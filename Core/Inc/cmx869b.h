@@ -12,4 +12,5 @@ void CMX869B_Init();
 int CMX869B_Receive(uint8_t *rx_data);
 int CMX869B_Transmit(uint8_t tx_data);
 int CMX869B_is_gse();
+
 #endif //CMX869B_CMX869B_H

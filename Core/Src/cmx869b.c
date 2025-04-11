@@ -3,6 +3,7 @@
 //
 #include "main.h"
 #include "cmx869b.h"
+#include "cmx869b_cmd.h"
 
 extern SPI_HandleTypeDef hspi1;
 
@@ -10,41 +11,69 @@ HAL_StatusTypeDef reg_write(uint8_t reg, uint8_t data1, uint8_t data2, int nByte
 
 HAL_StatusTypeDef reg_read(uint8_t reg, uint8_t *data1, uint8_t *data2, int nByte);
 
-#define CALL_QAM 0x37
-#define ANS_QAM 0x3F
-#define CALL_W_STAT 0xBC6F
-#define ANS_W_STAT 0x4C04
-#define N_CMD  5
-static uint8_t cmd[][3] = {
-    {0x01, 0x00, 0x00},
-    {0xE0, 0xA3, 0x00},
-    {0xE1, 0xFE, 0x76},
-    {0xE2, 0xFE, 0xF7},
-    {0xEA, 0x00, 0x00},
-};
+void loop_back() {
+    static HAL_StatusTypeDef rc;
+    static uint8_t data1, data2;
+    uint8_t cmd[3];
+    while (1){
+        for (int i = 'A'; i <= 'Z'; i++) {
+            cmd[0] = REG_TX;
+            cmd[1] = cmd[2] = i;
+            rc = reg_read(REG_STAT, &data1, &data2, 1);
+            rc = reg_write(cmd[0], cmd[1], cmd[2], 1);
+            HAL_Delay(1);
+            rc = reg_read(REG_STAT, &data1, &data2, 2);
+            rc = reg_read(REG_RX, &data1, &data2, 1);
+            HAL_Delay(1);
+        }
+    }
+}
+void loop_cross(int isGse) {
+    static HAL_StatusTypeDef rc;
+    static uint8_t data1, data2;
+    uint8_t cmd[3];
+    if (isGse==1) {
+        rc = reg_read(REG_STAT, &data1, &data2, 1);
+        rc = reg_read(REG_RX, &data1, &data2, 1);
+        HAL_Delay(1);
+    }else {
+        for (int i = 'A'; i <= 'Z'; i++) {
+            cmd[0] = REG_TX;
+            cmd[1] = i;
+            cmd[2] = '0';
+            rc = reg_read(REG_STAT, &data1, &data2, 2);
+            rc = reg_write(cmd[0], cmd[1], cmd[2], 1);
+            rc = reg_read(REG_STAT, &data1, &data2, 2);
+            HAL_Delay(1);
+        }
+    }
+}
 
 void CMX869B_Init() {
     // 地上系は、ジャンパありでCali, Drillは、ジャンパなしなでAns
     static HAL_StatusTypeDef rc;
     static uint8_t data1, data2;
-    uint16_t qam_stat;
+    uint8_t cmd[3];
     const int isGse = CMX869B_is_gse();
 
-    //CALLかANSでコマンド分岐
-    cmd[N_CMD - 1][2] = isGse == 1 ? CALL_QAM : ANS_QAM;
-    uint16_t ack_code = isGse == 1 ? CALL_W_STAT : ANS_W_STAT;
-    //コマンド実行
+    // 動作設定コマンド発光
     for (int i = 0; i < N_CMD; i++) {
-        rc = reg_write(cmd[i][0], cmd[i][1], cmd[i][2], 2);
+        for (int j = 0; j < 3; j++) {
+            cmd[j] = (isGse==1) ? cmd_call[i][j] : cmd_call[i][j];
+        }
+        rc = reg_write(cmd[0], cmd[1], cmd[2], 2);
         rc = reg_read(0xEB, &data1, &data2, 1);
         HAL_Delay(1);
     }
-    //ハンドシェーク待機
-    do {
-        rc = reg_read(0xEB, &data1, &data2, 1);
-        qam_stat = (data1 << 8) + data2;
-        HAL_Delay(1);
-    } while (qam_stat != ack_code);
+#ifdef MODE_1200
+    loop_cross(isGse);
+#endif
+#ifdef MODE_1200_LOOP_ANA
+    loop_back();
+#endif
+#ifdef MODE_1200_LOOP
+    loop_back();
+#endif
 }
 
 /**

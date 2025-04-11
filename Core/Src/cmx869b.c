@@ -71,7 +71,7 @@ void CMX869B_Init() {
 #ifdef MODE_1200_LOOP_ANA
     loop_back();
 #endif
-#ifdef MODE_1200_LOOP
+#ifdef MODE_1200_LOOP_DIGI
     loop_back();
 #endif
 }

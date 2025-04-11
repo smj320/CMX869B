@@ -14,7 +14,7 @@
 
 //-----Operation mode----
 //#define MODE_QAM
-//#define MODE_1200_LOOP
+//#define MODE_1200_LOOP_DIGI
 #define MODE_1200_LOOP_ANA
 //#define MODE_1200
 
@@ -37,7 +37,7 @@ const uint8_t cmd_ans[][3] = {
 };
 #endif
 
-#ifdef MODE_1200_LOOP
+#ifdef MODE_1200_LOOP_DIGI
 #define N_CMD  4
 const uint8_t cmd_call[][3] = {
     {0x01, 0x00, 0x00},

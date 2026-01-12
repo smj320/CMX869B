@@ -15,6 +15,8 @@
 // ビットフィールドは上がb0で下がb15
 // 送信するときはByte[1],Byte[0]の順
 //-------------------------------------
+#define General_Reset 0x01
+
 #define GRE_ADDR 0xE0
 typedef union {
     uint8_t  Bytes[2];

@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "cmx869b.h"
+#include "CMX869B.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -73,7 +73,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-    uint8_t TxData, RxData;
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -98,41 +98,12 @@ int main(void)
   MX_SPI1_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-    CMX869B_Init();
+  CMX869B_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  int p=0;
-    if (CMX869B_is_gse()) {
-        while (1) {
-            //ドリルなら、モデムにデータを投げてみる
-#ifdef _MODE_LOOP
-            TxData = 'K'+(p++);
-            CMX869B_Transmit(TxData);
-            HAL_Delay(50);
-            if (CMX869B_Receive(&RxData)==1) {
-                HAL_UART_Transmit(&huart2, &RxData, 1, 1000);
-                if(p>8) p=0;
-            }
-            HAL_Delay(200);
-#endif
-        }
-    } else {
-        while (1) {
-#ifdef _MODE_LOOP
-            //ループバックッモードなら、データを投げてみる。
-            TxData = 'K';
-            CMX869B_Transmit(TxData);
-            HAL_Delay(100);
-#endif
-            //GSEなら、モデムにデータが来ていたらホストに投げる
-            if (CMX869B_Receive(&RxData)) {
-                HAL_UART_Transmit(&huart2, &RxData, 1, 1000);
-            }
-            HAL_Delay(1000);
-        }
-
+    while (1) {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -314,8 +285,8 @@ static void MX_USART2_UART_Init(void)
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-/* USER CODE BEGIN MX_GPIO_Init_1 */
-/* USER CODE END MX_GPIO_Init_1 */
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+  /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOF_CLK_ENABLE();
@@ -323,39 +294,29 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(MODEM_RING_GPIO_Port, MODEM_RING_Pin, GPIO_PIN_RESET);
+  /*Configure GPIO pin : MODEM_RING_Pin */
+  GPIO_InitStruct.Pin = MODEM_RING_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(MODEM_RING_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : MODEM_INT_Pin */
-  GPIO_InitStruct.Pin = MODEM_INT_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  /*Configure GPIO pins : MODEM_INT_Pin MODEM_MODE_Pin */
+  GPIO_InitStruct.Pin = MODEM_INT_Pin|MODEM_MODE_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(MODEM_INT_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : MODEM_CS_Pin */
   GPIO_InitStruct.Pin = MODEM_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(MODEM_CS_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : MODEM_RING_Pin */
-  GPIO_InitStruct.Pin = MODEM_RING_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(MODEM_RING_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : MODEM_MODE_Pin */
-  GPIO_InitStruct.Pin = MODEM_MODE_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(MODEM_MODE_GPIO_Port, &GPIO_InitStruct);
-
-/* USER CODE BEGIN MX_GPIO_Init_2 */
-/* USER CODE END MX_GPIO_Init_2 */
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -375,8 +336,7 @@ void Error_Handler(void)
     }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
@@ -387,8 +347,8 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+    /* User can add his own implementation to report the file name and line number,
+       ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */

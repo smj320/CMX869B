@@ -21,7 +21,7 @@
 typedef union {
     uint8_t  Bytes[2];
     struct {
-        uint16_t IrqMask : 6;
+        uint16_t IrqMask : 6; //b0
         uint16_t IrqEna : 1;
         uint16_t Rst : 1;
         uint16_t Pwr : 1;
@@ -39,7 +39,7 @@ typedef union {
 typedef union {
     uint8_t  Bytes[2];
     struct {
-        uint16_t DataBits : 3;
+        uint16_t DataBits : 3; //b0
         uint16_t StartStop : 2;
         uint16_t Scramble : 2;
         uint16_t GardTone : 2;
@@ -52,13 +52,24 @@ typedef union {
 typedef union {
     uint8_t  Bytes[2];
     struct {
-        uint16_t BitsParity : 3;
+        uint16_t BitsParity : 3; //b0
         uint16_t StartStop_Synch : 3;
         uint16_t Equaliser : 3;
         uint16_t RxLevel : 3;
         uint16_t TxMode : 4;
     } __attribute__((packed)) Bits;
 } CMX869B_RxReg_TypeDef;
+
+#define QamStatusReg_ADDR 0xEB
+typedef union {
+    uint8_t  Bytes[2];
+    struct {
+        uint16_t Mode : 4; //b0
+        uint16_t SNR : 3;
+        uint16_t Zeros : 3;
+        uint16_t Messages : 6;
+    } __attribute__((packed)) Bits;
+} CMX869B_QamStatusReg_TypeDef;
 
 #define TxData_ADDR 0xE3   //8bit
 #define RxData_ADDR 0xE5   //8bit
@@ -67,7 +78,7 @@ typedef union {
 typedef union {
     uint8_t  Bytes[2];
     struct {
-        uint16_t FSKDemodulatorOutput : 1;
+        uint16_t FSKDemodulatorOutput : 1; //b0
         uint16_t TwoCharacter : 1;
         uint16_t HDLC_FSC_ABORT: 1;
         uint16_t HDLC_FSC_RCV : 1; //3
@@ -87,11 +98,17 @@ typedef union {
 
 
 #define QamReg_ADDR 0xEA
+//
+#define QamMaxBR_14400 0x111
+#define QamMaxBR_12000 0x110
+#define QamMaxBR_9600 0x101
+#define QamCall 0x010
+#define QamAnswer 0x011
 typedef union {
     uint8_t  Bytes[2];
     struct {
-        uint16_t protocol : 3;//14400 0b111, 12000 0b110, 9600 0b101
-        uint16_t command : 3; //Calling 0b010, Answer 0b011
+        uint16_t protocol : 3;
+        uint16_t command : 3; //Calling/Answer
         uint16_t zeros : 13;
     }  __attribute__((packed)) Bits;
 } CMX869B_QamReg_TypeDef;

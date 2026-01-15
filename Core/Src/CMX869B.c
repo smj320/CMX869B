@@ -61,8 +61,8 @@ int Send_Cmd(const uint8_t addr, const uint8_t Bytes[]) {
 
 int Send_Data(const uint8_t data) {
     TxBuffer[0] = TxData_ADDR;
-    TxBuffer[0] = data;
-    spi_tx(2);
+    TxBuffer[1] = data;
+    spi_tx(1);
     return Status;
 }
 
@@ -76,6 +76,16 @@ int Receive_Status(CMX869B_StatusReg_TypeDef *st) {
     return Status;
 }
 
+int Receive_Data(uint8_t *addr) {
+    memset(TxBuffer, 0, SPI_BUFFER_SIZE);
+    memset(RxBuffer, 0, SPI_BUFFER_SIZE);
+    TxBuffer[0] = RxData_ADDR;
+    memset(RxBuffer, 0, 3);
+    spi_rx(1);
+    *addr = RxBuffer[0];
+    return Status;
+}
+
 int Receive_QamStatus(CMX869B_QamStatus_TypeDef *st) {
     memset(TxBuffer, 0, SPI_BUFFER_SIZE);
     memset(RxBuffer, 0, SPI_BUFFER_SIZE);
@@ -86,16 +96,10 @@ int Receive_QamStatus(CMX869B_QamStatus_TypeDef *st) {
     return Status;
 }
 
-int Receive_Data(uint8_t addr) {
-    TxBuffer[0] = RxData_ADDR;
-    memset(RxBuffer, 0, 3);
-    spi_rx(3);
-    return Status;
-}
-
-
 //---------------------------------------
 // 初期化
+// 地上側受信　モデムの受信割込をUARTにながす
+// 地上側送信  UARTの受信割込でCMXにデータを流す
 //---------------------------------------
 void CMX869B_Init(void) {
     //Reset
@@ -105,21 +109,42 @@ void CMX869B_Init(void) {
     //Ring DetectがLOWだと1, Highだと0が返る
     Receive_Status(&StatusReg);
 
+    //レジスタリセット
+    GRE.Bits.Rst = 1;
+    Send_Cmd(GRE_ADDR, GRE.Bytes);
+
     //Send GRE, うまくいくと22pinが発振する
     GRE.Bits.Pwr = 1;
     GRE.Bits.HighGain = 1;
     GRE.Bits.PatDet = 1;
-    GRE.Bits.Rst = 1;
-    Send_Cmd(GRE_ADDR, GRE.Bytes);
-    //リセット解除。これをやらないとキャリアが出ない
+    GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
+    //GRE.Bits.IrqMask = 0b111111;
     Send_Cmd(GRE_ADDR, GRE.Bytes);
 
     //Send TxReg
-    //TxReg.Bits.TxMode = 0b1011;
-    TxReg.Bits.TxMode = 0b1101;
-    TxReg.Bits.TxLevel = 0b111;
+    //TxReg.Bits.TxMode = TxReg_Mode_V22_CALL;
+    TxReg.Bits.TxMode = TxReg_Mode_V22_ANS;
+    TxReg.Bits.DataBits = 0b110; //8bit Stop1
+    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     Send_Cmd(TxReg_ADDR, TxReg.Bytes);
+
+    //Send RxReg
+    RxReg.Bits.RxMode = TxReg_Mode_V22_CALL;
+    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, non overspeed
+    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
+    Send_Cmd(RxReg_ADDR, RxReg.Bytes);
+
+    //テスト送信
+    uint8_t data = 0;
+    for (uint8_t i = 0; i < 128; i++) {
+        Receive_Status(&StatusReg);
+        Send_Data(i);
+        Receive_Status(&StatusReg);
+        Receive_Status(&StatusReg);
+        Receive_Data(&data);
+        Receive_Status(&StatusReg);
+    }
     Receive_Status(&StatusReg);
 }
 

@@ -36,6 +36,9 @@ typedef union {
 } CMX869B_GRE_TypeDef;
 
 #define TxReg_ADDR 0xE1
+#define TxReg_Mode_V22_AUTO 0b1111
+#define TxReg_Mode_V22_ANS 0b1011
+#define TxReg_Mode_V22_CALL 0b1010
 typedef union {
     uint8_t  Bytes[2];
     struct {
@@ -56,7 +59,7 @@ typedef union {
         uint16_t StartStop_Synch : 3;
         uint16_t Equaliser : 3;
         uint16_t RxLevel : 3;
-        uint16_t TxMode : 4;
+        uint16_t RxMode : 4;
     } __attribute__((packed)) Bits;
 } CMX869B_RxReg_TypeDef;
 
@@ -87,7 +90,7 @@ typedef union {
         uint16_t RxDataReady : 1; //6
         uint16_t Zero2 : 2;
         uint16_t ModemEvent : 1;
-        uint16_t Zero1 : 1; //10: Automodem
+        uint16_t Zero1 : 1; //10:
         uint16_t TxU : 1;
         uint16_t TxD : 1;
         uint16_t PF : 1;

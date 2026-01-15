@@ -62,7 +62,7 @@ int Send_Cmd(const uint8_t addr, const uint8_t Bytes[]) {
 int Send_Data(const uint8_t data) {
     TxBuffer[0] = TxData_ADDR;
     TxBuffer[1] = data;
-    spi_tx(1);
+    spi_tx(2);
     return Status;
 }
 
@@ -86,7 +86,7 @@ int Receive_Data(uint8_t *addr) {
     return Status;
 }
 
-int Receive_QamStatus(CMX869B_QamStatus_TypeDef *st) {
+int Receive_QamStatus(CMX869B_QamStatusReg_TypeDef *st) {
     memset(TxBuffer, 0, SPI_BUFFER_SIZE);
     memset(RxBuffer, 0, SPI_BUFFER_SIZE);
     TxBuffer[0] = StatusReg_ADDR;
@@ -119,30 +119,29 @@ void CMX869B_Init(void) {
     GRE.Bits.PatDet = 1;
     GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
-    //GRE.Bits.IrqMask = 0b111111;
+    GRE.Bits.IrqMask = 0b100001;
     Send_Cmd(GRE_ADDR, GRE.Bytes);
 
     //Send TxReg
     //TxReg.Bits.TxMode = TxReg_Mode_V22_CALL;
-    TxReg.Bits.TxMode = TxReg_Mode_V22_ANS;
-    TxReg.Bits.DataBits = 0b110; //8bit Stop1
+    TxReg.Bits.TxMode = TxReg_Mode_BELL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
+    TxReg.Bits.DataBits = 0b110; //8bit Stop1
     Send_Cmd(TxReg_ADDR, TxReg.Bytes);
 
     //Send RxReg
-    RxReg.Bits.RxMode = TxReg_Mode_V22_CALL;
-    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, non overspeed
+    //RxReg.Bits.RxMode = RxReg_Mode_V22_ANS;
+    //RxReg.Bits.RxMode = RxReg_Mode_V22_CALL;
+    RxReg.Bits.RxMode = RxReg_Mode_BELL;
+    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
     Send_Cmd(RxReg_ADDR, RxReg.Bytes);
 
     //テスト送信
     uint8_t data = 0;
-    for (uint8_t i = 0; i < 128; i++) {
+    for (uint16_t i = 0; i < 2000; i++) {
         Receive_Status(&StatusReg);
-        Send_Data(i);
-        Receive_Status(&StatusReg);
-        Receive_Status(&StatusReg);
-        Receive_Data(&data);
+        Send_Data(i & 0xFF);
         Receive_Status(&StatusReg);
     }
     Receive_Status(&StatusReg);

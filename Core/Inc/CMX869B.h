@@ -39,6 +39,7 @@ typedef union {
 #define TxReg_Mode_V22_AUTO 0b1111
 #define TxReg_Mode_V22_ANS 0b1011
 #define TxReg_Mode_V22_CALL 0b1010
+#define TxReg_Mode_BELL 0b0011
 typedef union {
     uint8_t  Bytes[2];
     struct {
@@ -52,6 +53,11 @@ typedef union {
 } CMX869B_TxReg_TypeDef;
 
 #define RxReg_ADDR 0xE2
+#define RxReg_Mode_V22_AUTO 0b1111
+#define RxReg_Mode_V22_CALL 0b1011
+#define RxReg_Mode_V22_ANS 0b1010
+#define RxReg_Mode_BELL 0b0011
+
 typedef union {
     uint8_t  Bytes[2];
     struct {
@@ -63,18 +69,7 @@ typedef union {
     } __attribute__((packed)) Bits;
 } CMX869B_RxReg_TypeDef;
 
-#define QamStatusReg_ADDR 0xEB
-typedef union {
-    uint8_t  Bytes[2];
-    struct {
-        uint16_t Mode : 4; //b0
-        uint16_t SNR : 3;
-        uint16_t Zeros : 3;
-        uint16_t Messages : 6;
-    } __attribute__((packed)) Bits;
-} CMX869B_QamStatusReg_TypeDef;
-
-#define TxData_ADDR 0xE3   //8bit
+#define TxData_ADDR 0xE4   //8bit
 #define RxData_ADDR 0xE5   //8bit
 
 #define StatusReg_ADDR 0xE6
@@ -82,10 +77,10 @@ typedef union {
     uint8_t  Bytes[2];
     struct {
         uint16_t FSKDemodulatorOutput : 1; //b0
-        uint16_t TwoCharacter : 1;
-        uint16_t HDLC_FSC_ABORT: 1;
-        uint16_t HDLC_FSC_RCV : 1; //3
-        uint16_t FcsError : 1; //4
+        uint16_t Char2Mode : 1;
+        uint16_t Char2EvenHasParity: 1;
+        uint16_t Char2EvenParity : 1; //3
+        uint16_t FrameError : 1; //4
         uint16_t RxDataOverflow : 1;
         uint16_t RxDataReady : 1; //6
         uint16_t Zero2 : 2;
@@ -99,9 +94,7 @@ typedef union {
     } __attribute__((packed)) Bits;
 } CMX869B_StatusReg_TypeDef;
 
-
 #define QamReg_ADDR 0xEA
-//
 #define QamMaxBR_14400 0x111
 #define QamMaxBR_12000 0x110
 #define QamMaxBR_9600 0x101
@@ -116,16 +109,18 @@ typedef union {
     }  __attribute__((packed)) Bits;
 } CMX869B_QamReg_TypeDef;
 
+
 #define QamStatusReg_ADDR 0xEB
 typedef union {
     uint8_t  Bytes[2];
     struct {
-        uint16_t Mode : 4;
-        uint16_t snr : 3;
-        uint16_t zeros : 3;
-        uint16_t message : 6;
+        uint16_t Mode : 4; //b0
+        uint16_t SNR : 3;
+        uint16_t Zeros : 3;
+        uint16_t Messages : 6;
     } __attribute__((packed)) Bits;
-} CMX869B_QamStatus_TypeDef;
+} CMX869B_QamStatusReg_TypeDef;
+
 
 void CMX869B_Init(void);
 

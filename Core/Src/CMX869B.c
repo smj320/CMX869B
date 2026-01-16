@@ -119,7 +119,8 @@ void CMX869B_Init(void) {
     GRE.Bits.PatDet = 1;
     GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
-    GRE.Bits.IrqMask = 0b100001;
+    GRE.Bits.IrqEna = 1;
+    GRE.Bits.IrqMask =  0b001001;
     Send_Cmd(GRE_ADDR, GRE.Bytes);
 
     //Send TxReg
@@ -143,6 +144,7 @@ void CMX869B_Init(void) {
         Receive_Status(&StatusReg);
         Send_Data(i & 0xFF);
         Receive_Status(&StatusReg);
+        HAL_Delay(10);
     }
     Receive_Status(&StatusReg);
 }

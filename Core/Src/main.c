@@ -296,17 +296,11 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_SET);
 
-  /*Configure GPIO pin : MODEM_RING_Pin */
-  GPIO_InitStruct.Pin = MODEM_RING_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(MODEM_RING_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : MODEM_INT_Pin MODEM_MODE_Pin */
-  GPIO_InitStruct.Pin = MODEM_INT_Pin|MODEM_MODE_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  /*Configure GPIO pin : MODEM_INT_Pin */
+  GPIO_InitStruct.Pin = MODEM_INT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  HAL_GPIO_Init(MODEM_INT_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : MODEM_CS_Pin */
   GPIO_InitStruct.Pin = MODEM_CS_Pin;
@@ -314,6 +308,16 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(MODEM_CS_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : MODEM_MODE_Pin */
+  GPIO_InitStruct.Pin = MODEM_MODE_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(MODEM_MODE_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   /* USER CODE END MX_GPIO_Init_2 */

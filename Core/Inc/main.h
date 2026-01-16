@@ -59,12 +59,11 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define MCO_Pin GPIO_PIN_0
 #define MCO_GPIO_Port GPIOF
-#define MODEM_RING_Pin GPIO_PIN_1
-#define MODEM_RING_GPIO_Port GPIOF
 #define VCP_TX_Pin GPIO_PIN_2
 #define VCP_TX_GPIO_Port GPIOA
 #define MODEM_INT_Pin GPIO_PIN_8
 #define MODEM_INT_GPIO_Port GPIOA
+#define MODEM_INT_EXTI_IRQn EXTI9_5_IRQn
 #define MODEM_CS_Pin GPIO_PIN_11
 #define MODEM_CS_GPIO_Port GPIOA
 #define MODEM_MODE_Pin GPIO_PIN_12

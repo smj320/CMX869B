@@ -76,21 +76,24 @@ typedef union {
 typedef union {
     uint8_t  Bytes[2];
     struct {
-        uint16_t FSKDemodulatorOutput : 1; //b0
-        uint16_t Char2Mode : 1;
-        uint16_t Char2EvenHasParity: 1;
-        uint16_t Char2EvenParity : 1; //3
-        uint16_t FrameError : 1; //4
-        uint16_t RxDataOverflow : 1;
-        uint16_t RxDataReady : 1; //6
-        uint16_t Zero2 : 2;
-        uint16_t ModemEvent : 1;
-        uint16_t Zero1 : 1; //10:
-        uint16_t TxU : 1;
-        uint16_t TxD : 1;
-        uint16_t PF : 1;
-        uint16_t RD : 1;
-        uint16_t IRQ : 1; //15
+        uint16_t FSKDemodulatorOutput : 1; // b0
+        uint16_t Char2Mode : 1;            // b1
+        uint16_t Char2EvenHasParity : 1;   // b2
+        uint16_t Char2EvenParity : 1;      // b3
+        uint16_t FrameError : 1;           // b4
+        uint16_t RxDataOverflow : 1;       // b5
+        uint16_t RxDataReady : 1;          // b6
+        uint16_t b7_Unused : 1;            // b7
+        // MSB (b8-b15)
+        uint16_t b8_RightJustify : 1;      // b8
+        uint16_t b9_FrameSyncDetect : 1;   // b9
+        uint16_t EnergyDetect : 1;         // b10
+        uint16_t TxDataOverflow : 1;       // b11
+        uint16_t TxDataReady : 1;          // b12
+        uint16_t ProgrammingFlag : 1;      // b13
+        uint16_t RingDetect : 1;           // b14
+        uint16_t IRQ : 1;                  // b15
+
     } __attribute__((packed)) Bits;
 } CMX869B_StatusReg_TypeDef;
 
@@ -120,7 +123,6 @@ typedef union {
         uint16_t Messages : 6;
     } __attribute__((packed)) Bits;
 } CMX869B_QamStatusReg_TypeDef;
-
 
 void CMX869B_Init(void);
 

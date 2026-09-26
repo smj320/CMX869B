@@ -30,13 +30,13 @@ static CMX869B_QamStatusReg_TypeDef QamStatusReg = {0};
 // len 送信バイト(1 or 2)
 // tx_data[0]はアドレス
 //---------------------------------------
-int spi_tx(const uint8_t len, const uint8_t tx_data[]) {
+int spi_tx(uint8_t len, uint8_t tx_data[]) {
 
     // 1. CSをLOWにする
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
 
     // SPI送信の実行
-    if (HAL_SPI_Transmit(&hspi1, tx_data, len, 1) != HAL_OK)
+    if (HAL_SPI_Transmit(&hspi1, tx_data, len, 10) != HAL_OK)
     {
         // エラー処理
         Error_Handler();
@@ -50,10 +50,11 @@ int spi_tx(const uint8_t len, const uint8_t tx_data[]) {
 // tx_data[0]はアドレス
 //---------------------------------------
 int spi_rx(const uint8_t len, uint8_t rx_data[]) {
+    HAL_StatusTypeDef st;
     //CS=0
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
 
-    if (HAL_SPI_Receive(&hspi1, rx_data, len, 1) != HAL_OK)
+    if ((st=HAL_SPI_Receive(&hspi1, rx_data, len, 10)) != HAL_OK)
     {
         // エラー処理
         Error_Handler();
@@ -66,8 +67,8 @@ int spi_rx(const uint8_t len, uint8_t rx_data[]) {
 //---------------------------------------
 // 補助関数(高レベル）
 //---------------------------------------
-int send_cmd(const uint8_t addr, const uint8_t Bytes[]) {
-    const uint8_t buffer[] = {addr, Bytes[1], Bytes[0]};
+int send_cmd(uint8_t addr, uint8_t Bytes[]) {
+    uint8_t buffer[] = {addr, Bytes[1], Bytes[0]};
     if (addr == General_Reset) {
         spi_tx(1, buffer);
     }else {
@@ -92,7 +93,7 @@ int send_data(const uint8_t data) {
 
 int receive_data(uint8_t *st) {
     uint8_t buffer[] = {RxData_ADDR, 0xFF};
-    Status = spi_rx(1, buffer);
+    Status = spi_rx(2, buffer);
     *st = buffer[1];
     return 0;
 }
@@ -156,7 +157,9 @@ void set_autl_ans(void) {
 void CMX869B_Init(void) {
     //Reset
     __HAL_SPI_ENABLE(&hspi1);
-    const uint8_t dummy[] = {0,0};
+    uint8_t tx_data = 0x55;
+    uint8_t rx_data = 0;
+    uint8_t dummy[] = {0,0};
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_SET);
     send_cmd(General_Reset,dummy);
 
@@ -169,21 +172,36 @@ void CMX869B_Init(void) {
     send_cmd(GRE_ADDR, GRE.Bytes);
 
     //Send GRE, うまくいくと22pinが発振する
+    //TX,RX関係の割込を許可
     GRE.Bits.Pwr = 1;
     GRE.Bits.HighGain = 1;
     GRE.Bits.PatDet = 1;
+    //GRE.Bits.LB = 0;
     GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
-    GRE.Bits.IrqMask = 0b000001;
+    GRE.Bits.IrqMask = 0b000000;
     send_cmd(GRE_ADDR, GRE.Bytes);
 
     // モデム送受信の設定
-    //set_bell();
+    set_bell();
     //set_v22_ans();
-    set_v22_call();
+    //set_v22_call();
+    //起動直後にはRXDにゴミが入っているので除去
+    receive_status(&StatusReg);
+    receive_data(&rx_data);
     receive_status(&StatusReg);
 
+    //割込許可
+    GRE.Bits.IrqMask = 0b000001;
+    send_cmd(GRE_ADDR, GRE.Bytes);
+    receive_status(&StatusReg);
+
+    //ループバックにデータを送ってみみる
+    send_data((tx_data));
+    receive_status(&StatusReg);
+    receive_data(&rx_data);
+    receive_status(&StatusReg);
     //
 
     const char *msg = "Hello, CMX869B!\n\r";

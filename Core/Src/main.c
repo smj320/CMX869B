@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -25,6 +26,7 @@
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
+typedef StaticTask_t osStaticThreadDef_t;
 /* USER CODE BEGIN PTD */
 
 /* USER CODE END PTD */
@@ -46,6 +48,37 @@ SPI_HandleTypeDef hspi1;
 
 UART_HandleTypeDef huart2;
 
+/* Definitions for defaultTask */
+osThreadId_t defaultTaskHandle;
+const osThreadAttr_t defaultTask_attributes = {
+  .name = "defaultTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for RxTask */
+osThreadId_t RxTaskHandle;
+uint32_t RxTaskBuffer[ 128 ];
+osStaticThreadDef_t RxTaskControlBlock;
+const osThreadAttr_t RxTask_attributes = {
+  .name = "RxTask",
+  .cb_mem = &RxTaskControlBlock,
+  .cb_size = sizeof(RxTaskControlBlock),
+  .stack_mem = &RxTaskBuffer[0],
+  .stack_size = sizeof(RxTaskBuffer),
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for TxTask */
+osThreadId_t TxTaskHandle;
+uint32_t TxTaskBuffer[ 128 ];
+osStaticThreadDef_t TxTaskControlBlock;
+const osThreadAttr_t TxTask_attributes = {
+  .name = "TxTask",
+  .cb_mem = &TxTaskControlBlock,
+  .cb_size = sizeof(TxTaskControlBlock),
+  .stack_mem = &TxTaskBuffer[0],
+  .stack_size = sizeof(TxTaskBuffer),
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -56,6 +89,10 @@ static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
+void StartDefaultTask(void *argument);
+void StartRxTask(void *argument);
+void StartTxTask(void *argument);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -100,6 +137,48 @@ int main(void)
   /* USER CODE BEGIN 2 */
   CMX869B_Init();
   /* USER CODE END 2 */
+
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* creation of defaultTask */
+  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+
+  /* creation of RxTask */
+  RxTaskHandle = osThreadNew(StartRxTask, NULL, &RxTask_attributes);
+
+  /* creation of TxTask */
+  TxTaskHandle = osThreadNew(StartTxTask, NULL, &TxTask_attributes);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* USER CODE BEGIN RTOS_EVENTS */
+  /* add events, ... */
+  /* USER CODE END RTOS_EVENTS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -322,6 +401,60 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartDefaultTask */
+/**
+  * @brief  Function implementing the defaultTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartDefaultTask */
+void StartDefaultTask(void *argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartRxTask */
+/**
+* @brief Function implementing the RxTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartRxTask */
+void StartRxTask(void *argument)
+{
+  /* USER CODE BEGIN StartRxTask */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartRxTask */
+}
+
+/* USER CODE BEGIN Header_StartTxTask */
+/**
+* @brief Function implementing the TxTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTxTask */
+void StartTxTask(void *argument)
+{
+  /* USER CODE BEGIN StartTxTask */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartTxTask */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.

@@ -81,15 +81,15 @@ typedef union {
         uint16_t Char2EvenHasParity : 1;   // b2
         uint16_t Char2EvenParity : 1;      // b3
         uint16_t FrameError : 1;           // b4
-        uint16_t RxDataOverflow : 1;       // b5
-        uint16_t RxDataReady : 1;          // b6
+        uint16_t RxDataOverflow : 1;       // b5　 MASK b00
+        uint16_t RxDataReady : 1;          // b6 　MASK b00
         uint16_t b7_Unused : 1;            // b7
         // MSB (b8-b15)
         uint16_t b8_RightJustify : 1;      // b8
         uint16_t b9_FrameSyncDetect : 1;   // b9
         uint16_t EnergyDetect : 1;         // b10
-        uint16_t TxDataOverflow : 1;       // b11
-        uint16_t TxDataReady : 1;          // b12
+        uint16_t TxDataOverflow : 1;       // b11　MASK b03
+        uint16_t TxDataReady : 1;          // b12　MASK b03
         uint16_t ProgrammingFlag : 1;      // b13
         uint16_t RingDetect : 1;           // b14
         uint16_t IRQ : 1;                  // b15

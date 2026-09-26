@@ -147,6 +147,7 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
+  CMX869B_RtosInit();
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
@@ -390,9 +391,13 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : MODEM_INT_Pin */
   GPIO_InitStruct.Pin = MODEM_INT_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(MODEM_INT_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   /* USER CODE END MX_GPIO_Init_2 */
@@ -430,10 +435,20 @@ void StartDefaultTask(void *argument)
 void StartRxTask(void *argument)
 {
   /* USER CODE BEGIN StartRxTask */
+  CMX869B_StatusReg_TypeDef st;
+  uint8_t rx;
+
+  //RxDataReady / RxDataOverflow で割込
+  CMX869B_EnableIrq(0b000001);
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    CMX869B_WaitIrq(osWaitForever);
+    receive_status(&st);  //IRQNを解除
+    if (st.Bits.RxDataReady || st.Bits.RxDataOverflow) {
+      receive_data(&rx);
+      HAL_UART_Transmit(&huart2, &rx, 1, 100);
+    }
   }
   /* USER CODE END StartRxTask */
 }
@@ -451,7 +466,9 @@ void StartTxTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    //ループバック試験(GRE.LB=1)：1秒ごとに'U'を送り、RxTaskがUARTに流す
+    send_data(0x55);
+    osDelay(1000);
   }
   /* USER CODE END StartTxTask */
 }

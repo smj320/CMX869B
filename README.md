@@ -1,5 +1,12 @@
 # CMX869B
 
+
+## 脇込みハンドラの再定義
+
+HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+のようなものはcubemxが __weak属性で定義してくれるので、
+ユーザーが同じ名前で定義するとリンクで上書きできる。
+
 ## 操作受信
 
 基本、送受信は割込でやりたい。TX,RXともに割込の
@@ -36,3 +43,14 @@ len=1の場合は最後の文字なので、割込マスクを落とす
 ステートが1のうちはバッファに保存
 バッファオーバランになったらステートを0に戻して待機
 クローズが来たらバッファを解析して実行、ステートを0に戻す
+
+
+## RTOSを入れたときのデバッガがとまらない問題
+
+OpenOCD標準の target/stm32f3x.cfg は、書き込みに使うRAMの作業領域をデフォルトで 16KB にしています。F303K8のSRAMは 12KB しかありません。
+•
+書き込み用のバッファはイメージが大きいほど大きく確保されます。FreeRTOSを入れてイメージが約19KBに増えたため、バッファが実在しないRAMの範囲まではみ出し、error writing to flash at address 0x08000000 で失敗していました。FreeRTOSを入れる前は、イメージが小さかったので表に出なかったのだと思います。
+修正した内容
+st_nucleo_f3.cfg、st_nucleo_f3_ans.cfg、st_nucleo_f3_call.cfg の3つで、source [find target/stm32f3x.cfg] の前に次の行を追加しました。
+set WORKAREASIZE 0x2000
+このあと書き込みは Verified OK になり、ボードには現在のビルドが入っています。

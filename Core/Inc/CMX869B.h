@@ -9,6 +9,7 @@
  * Xtal 6.144MHz, 47pF
  */
 #include <stdint.h>
+#include "cmsis_os.h"
 
 //-------------------------------------
 // レジスタ
@@ -125,5 +126,12 @@ typedef union {
 } CMX869B_QamStatusReg_TypeDef;
 
 void CMX869B_Init(void);
+void CMX869B_RtosInit(void);
+void CMX869B_EnableIrq(uint8_t mask);
+osStatus_t CMX869B_WaitIrq(uint32_t timeout);
+
+int receive_status(CMX869B_StatusReg_TypeDef *st);
+int send_data(uint8_t data);
+int receive_data(uint8_t *st);
 
 #endif //CMX869B_CMX869B_H

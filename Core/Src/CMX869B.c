@@ -3,11 +3,10 @@
 //
 
 #include "stm32f3xx_hal.h"
-#include "../Inc/CMX869B.h"
-
+#include "CMX869B.h"
 #include <string.h>
-
 #include "main.h"
+#include "cmsis_os.h"
 
 extern SPI_HandleTypeDef hspi1;
 extern UART_HandleTypeDef huart2;
@@ -25,13 +24,32 @@ static CMX869B_QamReg_TypeDef QamReg = {0};
 //
 static CMX869B_StatusReg_TypeDef StatusReg = {0};
 static CMX869B_QamStatusReg_TypeDef QamStatusReg = {0};
+//
+static osSemaphoreId_t IrqSemHandle = NULL;   // IRQN割込 → RxTask通知
+static osMutexId_t SpiMutexHandle = NULL;     // SPIの排他
+
+//---------------------------------------
+// SPIの排他
+// CMX869B_RtosInit()前(スケジューラ起動前の初期化)はロックしない
+//---------------------------------------
+static void spi_lock(void) {
+    if (SpiMutexHandle != NULL) {
+        osMutexAcquire(SpiMutexHandle, osWaitForever);
+    }
+}
+
+static void spi_unlock(void) {
+    if (SpiMutexHandle != NULL) {
+        osMutexRelease(SpiMutexHandle);
+    }
+}
 
 //---------------------------------------
 // len 送信バイト(1 or 2)
 // tx_data[0]はアドレス
 //---------------------------------------
 int spi_tx(uint8_t len, uint8_t tx_data[]) {
-
+    spi_lock();
     // 1. CSをLOWにする
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
 
@@ -42,6 +60,7 @@ int spi_tx(uint8_t len, uint8_t tx_data[]) {
         Error_Handler();
     }
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_SET);
+    spi_unlock();
     return Status;
 }
 
@@ -51,6 +70,7 @@ int spi_tx(uint8_t len, uint8_t tx_data[]) {
 //---------------------------------------
 int spi_rx(const uint8_t len, uint8_t rx_data[]) {
     HAL_StatusTypeDef st;
+    spi_lock();
     //CS=0
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
 
@@ -61,6 +81,7 @@ int spi_rx(const uint8_t len, uint8_t rx_data[]) {
     }
     //CS=1
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_SET);
+    spi_unlock();
     return Status;
 }
 
@@ -157,8 +178,6 @@ void set_autl_ans(void) {
 void CMX869B_Init(void) {
     //Reset
     __HAL_SPI_ENABLE(&hspi1);
-    uint8_t tx_data = 0x55;
-    uint8_t rx_data = 0;
     uint8_t dummy[] = {0,0};
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_SET);
     send_cmd(General_Reset,dummy);
@@ -187,60 +206,59 @@ void CMX869B_Init(void) {
     set_bell();
     //set_v22_ans();
     //set_v22_call();
+
+    //割込マスクはスケジューラ起動後にCMX869B_EnableIrq()で外す
     //起動直後にはRXDにゴミが入っているので除去
+    uint8_t rx_data;
     receive_status(&StatusReg);
     receive_data(&rx_data);
     receive_status(&StatusReg);
-
-    //割込許可
-    GRE.Bits.IrqMask = 0b000001;
-    send_cmd(GRE_ADDR, GRE.Bytes);
-    receive_status(&StatusReg);
-
-    //ループバックにデータを送ってみみる
-    send_data((tx_data));
-    receive_status(&StatusReg);
-    receive_data(&rx_data);
-    receive_status(&StatusReg);
-    //
 
     const char *msg = "Hello, CMX869B!\n\r";
     HAL_UART_Transmit(&huart2, (uint8_t *) msg, strlen(msg), 1000);
 }
 
 //---------------------------------------
-// UART2受信割込
-// 初期化で割込を許可しておく
-// HAL_UART_Receive_IT(&huart2, UART2_rxBuffer, 1);
+// RTOS資源の生成
+// osKernelInitialize()後、osKernelStart()前に呼ぶ
 //---------------------------------------
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-    if (huart->Instance == USART2) {
-        const uint8_t rx_data = (uint8_t) (huart2.Instance->RDR);
-        send_data(rx_data);
-        // 次の1バイトを待機するために再度割り込みを有効化する
-        HAL_UART_Receive_IT(&huart2, (uint8_t *) UART2_rxBuffer, 1);
+void CMX869B_RtosInit(void) {
+    IrqSemHandle = osSemaphoreNew(1, 0, NULL);
+    SpiMutexHandle = osMutexNew(NULL);
+    if (IrqSemHandle == NULL || SpiMutexHandle == NULL) {
+        Error_Handler();
     }
 }
 
 //---------------------------------------
-// モデム受信割込
+// モデム割込の許可
+// 割込を受けるタスクでループに入る前に呼ぶ
 //---------------------------------------
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-    if (GPIO_Pin == MODEM_INT_Pin) // MODEM_INTピンからの割り込みか判定
+void CMX869B_EnableIrq(uint8_t mask) {
+    CMX869B_StatusReg_TypeDef st;
+    //IRQNがLowのまま残っていると立下りが来ないので、先に解除しておく
+    receive_status(&st);
+    __HAL_GPIO_EXTI_CLEAR_IT(MODEM_INT_Pin);
+    osSemaphoreAcquire(IrqSemHandle, 0);
+
+    GRE.Bits.IrqMask = mask;
+    send_cmd(GRE_ADDR, GRE.Bytes);
+}
+
+//---------------------------------------
+// モデム割込待ち
+// 割込が来たらosOK、タイムアウトならosErrorTimeout
+//---------------------------------------
+osStatus_t CMX869B_WaitIrq(uint32_t timeout) {
+    return osSemaphoreAcquire(IrqSemHandle, timeout);
+}
+
+//割込関数
+//SPIはここで触らず、RxTaskに通知するだけ
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == MODEM_INT_Pin && IrqSemHandle != NULL)
     {
-        //CS=0
-        HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
-        //アドレス送信
-        *(__IO uint8_t *)&hspi1.Instance->DR = RxData_ADDR;
-        //受信クロック送信用ダミーデータ
-        *(__IO uint8_t *)&hspi1.Instance->DR = 0xFF;
-        //アドレス送信時のゴミ掃除
-        (void)hspi1.Instance->DR;
-        //SPIデータ取得
-        uint8_t modem_data = *(__IO uint8_t *)&hspi1.Instance->DR;
-        //CS=1
-        HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_SET);
-        //UARTに送信
-        *(__IO uint8_t *)&huart2.Instance->TDR = modem_data;
+        osSemaphoreRelease(IrqSemHandle);
     }
 }

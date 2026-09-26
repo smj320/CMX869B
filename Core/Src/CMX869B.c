@@ -101,6 +101,58 @@ int receive_data(uint8_t *st) {
 // 地上側受信　モデムの受信割込をUARTにながす
 // 地上側送信  UARTの受信割込でCMXにデータを流す
 //---------------------------------------
+// 1200bps 半二重
+// 発振の確認、割込受信デバッグのループバックとかに使う
+void set_bell(void) {
+    // TX
+    TxReg.Bits.TxMode = TxReg_Mode_BELL;
+    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
+    TxReg.Bits.DataBits = 0b110; //8bit Stop1
+    send_cmd(TxReg_ADDR, TxReg.Bytes);
+    // RX
+    RxReg.Bits.RxMode = RxReg_Mode_BELL;
+    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
+    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
+    send_cmd(RxReg_ADDR, RxReg.Bytes);
+}
+// 2400 bps 全二重
+// ネゴシエーション不用なので、ブチ切りでもいける。
+void set_v22_call(void) {
+    // TX
+    TxReg.Bits.TxMode = TxReg_Mode_V22_CALL;
+    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
+    TxReg.Bits.DataBits = 0b110; //8bit Stop1
+    send_cmd(TxReg_ADDR, TxReg.Bytes);
+    // RX
+    RxReg.Bits.RxMode = RxReg_Mode_V22_CALL;
+    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
+    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
+    send_cmd(RxReg_ADDR, RxReg.Bytes);
+}
+
+void set_v22_ans(void) {
+    // TX
+    TxReg.Bits.TxMode = TxReg_Mode_V22_ANS;
+    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
+    TxReg.Bits.DataBits = 0b110; //8bit Stop1
+    send_cmd(TxReg_ADDR, TxReg.Bytes);
+    // RX
+    RxReg.Bits.RxMode = RxReg_Mode_V22_ANS;
+    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
+    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
+    send_cmd(RxReg_ADDR, RxReg.Bytes);
+}
+
+// Auto modem
+void set_auto_call(void) {
+    // TX
+    // RX
+}
+
+void set_autl_ans(void) {
+    RxReg.Bits.RxMode = RxReg_Mode_V22_ANS;
+}
+
 void CMX869B_Init(void) {
     //Reset
     __HAL_SPI_ENABLE(&hspi1);
@@ -112,9 +164,11 @@ void CMX869B_Init(void) {
     //Ring DetectがLOWだと1, Highだと0が返る
     receive_status(&StatusReg);
 
-    //Send GRE, うまくいくと22pinが発振する
+    // リセット
     GRE.Bits.Rst = 1;
     send_cmd(GRE_ADDR, GRE.Bytes);
+
+    //Send GRE, うまくいくと22pinが発振する
     GRE.Bits.Pwr = 1;
     GRE.Bits.HighGain = 1;
     GRE.Bits.PatDet = 1;
@@ -124,28 +178,16 @@ void CMX869B_Init(void) {
     GRE.Bits.IrqMask = 0b000001;
     send_cmd(GRE_ADDR, GRE.Bytes);
 
-    //Send TxReg
-    //TxReg.Bits.TxMode = TxReg_Mode_V22_CALL;
-    TxReg.Bits.TxMode = TxReg_Mode_BELL;
-    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
-    TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    send_cmd(TxReg_ADDR, TxReg.Bytes);
-
-    //Send RxReg
-    //RxReg.Bits.RxMode = RxReg_Mode_V22_ANS;
-    //RxReg.Bits.RxMode = RxReg_Mode_V22_CALL;
-    RxReg.Bits.RxMode = RxReg_Mode_BELL;
-    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
-    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    send_cmd(RxReg_ADDR, RxReg.Bytes);
-
+    // モデム送受信の設定
+    //set_bell();
+    //set_v22_ans();
+    set_v22_call();
     receive_status(&StatusReg);
-    uint8_t rxdata;
-    receive_data(&rxdata);
-    uint8_t msg[] = "Hello World!\n";
-    HAL_UART_Transmit(&huart2, msg, sizeof(msg), HAL_MAX_DELAY);
+
     //
-    HAL_UART_Receive_IT(&huart2, (uint8_t *) UART2_rxBuffer, 1);
+
+    const char *msg = "Hello, CMX869B!\n\r";
+    HAL_UART_Transmit(&huart2, (uint8_t *) msg, strlen(msg), 1000);
 }
 
 //---------------------------------------

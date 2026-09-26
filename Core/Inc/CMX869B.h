@@ -36,7 +36,7 @@ typedef union {
 } CMX869B_GRE_TypeDef;
 
 #define TxReg_ADDR 0xE1
-#define TxReg_Mode_V22_AUTO 0b1111
+#define TxReg_Mode_QAM_AUTO 0b1111
 #define TxReg_Mode_V22_ANS 0b1011
 #define TxReg_Mode_V22_CALL 0b1010
 #define TxReg_Mode_BELL 0b0011
@@ -53,7 +53,7 @@ typedef union {
 } CMX869B_TxReg_TypeDef;
 
 #define RxReg_ADDR 0xE2
-#define RxReg_Mode_V22_AUTO 0b1111
+#define RxReg_Mode_QAM_AUTO 0b1111
 #define RxReg_Mode_V22_CALL 0b1011
 #define RxReg_Mode_V22_ANS 0b1010
 #define RxReg_Mode_BELL 0b0011

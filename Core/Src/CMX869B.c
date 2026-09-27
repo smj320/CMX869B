@@ -15,6 +15,7 @@ extern UART_HandleTypeDef huart2;
 extern TIM_HandleTypeDef htim2;
 extern osMessageQueueId_t txQueueHandle;
 extern osMessageQueueId_t rxQueueHandle;
+extern osThreadId_t CMX869bTaskHandle;
 HAL_StatusTypeDef Status;
 
 
@@ -194,8 +195,8 @@ void CMX869B_Init(void) {
     //GRE.Bits.LB = 0;
     GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
-    GRE.Bits.IrqEna = 0;
-    GRE.Bits.IrqMask = 0b000000;
+    GRE.Bits.IrqEna = 1;
+    GRE.Bits.IrqMask = 0b000001;
     send_cmd(GRE_ADDR, GRE.Bytes);
 
     // モデム送受信の設定
@@ -227,40 +228,29 @@ void CMX869B_Init(void) {
 // CMX869bのRXDにデータがあれば、コマンドデコードを行う
 //********************************************
 void CMX869BbTaskLoop() {
-    uint8_t log[512];
-    uint8_t tx_char;
-    uint16_t q_char;
     CMX869B_Init();
     for (;;) {
         //待機
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
+        receive_status(&StatusReg);
+        //TxReadyでtxQueが空でなければ送信
+        //最後のデータを送る前に送信割込禁止にする
+
         //GSEモードの場合
+        receive_status(&StatusReg);
         if (MODEM_MODE_GSE == 1) {
-            // UARTは受信割込でTXストリームバッファにデータを書き込む
-            // TXストリームバッファにデータがあれば、CMX869bのTXDに書き込む
-            if (xQueueReceive(txQueueHandle, &q_char, 0) == pdPASS) {
-                tx_char = q_char;
-                //HAL_UART_Transmit(&huart2, &tx_char, 1, HAL_MAX_DELAY);
-                send_data(tx_char);
-            }
-            // CMX869bのRXDにデータがあれば、UARTに出力する。
-            receive_status(&StatusReg);
-            if (StatusReg.Bits.RxDataReady == 1) {
-                receive_data(&tx_char);
-                //huart2.Instance->TDR = tx_char;
-                HAL_UART_Transmit(&huart2, &tx_char, 1, 10);
-            }
+            //受信データがあればUARTに流す
         }else {
-            // HKはTXストリームバッファにデータを書き込む
-            // TXストリームバッファにデータがあれば、CMX869bのTXDに書き込む
-            // CMX869bのRXDにデータがあれば、コマンドデコードを行う
-            receive_status(&StatusReg);
-            if (StatusReg.Bits.RxDataReady == 1) {
-                receive_data(&tx_char);
-                //huart2.Instance->TDR = tx_char;
-                HAL_UART_Transmit(&huart2, &tx_char, 1, 10);
-            }
+            //受信データがあればUコマンド解析に回す
         }
+    }
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    if (GPIO_Pin == MODEM_INT_Pin) {
+        vTaskNotifyGiveFromISR(CMX869bTaskHandle, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 }

@@ -372,9 +372,9 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 1;
+  htim2.Init.Prescaler = 8000;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 5000;
+  htim2.Init.Period = 1000;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -540,17 +540,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-  static int count = 0;
-  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   if (htim->Instance == TIM2)
   {
-    if (count%10==0) {
-      vTaskNotifyGiveFromISR(CMX869bTaskHandle, &xHigherPriorityTaskWoken);
-    }
-    if (count++ == 250) {
-      vTaskNotifyGiveFromISR(HKTaskHandle, &xHigherPriorityTaskWoken);
-      count=0;
-    }
+    //HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    vTaskNotifyGiveFromISR(HKTaskHandle, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
   }
   /* USER CODE END Callback 1 */

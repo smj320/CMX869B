@@ -11,7 +11,8 @@
 extern UART_HandleTypeDef huart2;
 extern osMessageQueueId_t txQueueHandle;
 extern osMessageQueueId_t rxQueueHandle;
-
+//
+static CMX869B_StatusReg_TypeDef StatusReg = {0};
 
 //********************************************
 // モデム監視タスクループ
@@ -23,9 +24,11 @@ void HKTaskLoop() {
         //INTからのウェイクアップを待機
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
+        HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
         //TXキューにデータを書き込む
         for (int i = 0; i < strlen((const char*)message); i++) {
             xQueueSend(txQueueHandle,&message[i],0);
         }
+        //TX割込許可
     }
 }

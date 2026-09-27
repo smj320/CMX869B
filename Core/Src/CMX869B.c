@@ -200,7 +200,7 @@ void CMX869B_Init(void) {
     //GRE.Bits.LB = 0;
     GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
-    GRE.Bits.IrqEna = 1;
+    GRE.Bits.IrqEna = 0;
     GRE.Bits.IrqMask = 0b000000;
     send_cmd(GRE_ADDR, GRE.Bytes);
 
@@ -220,51 +220,6 @@ void CMX869B_Init(void) {
     HAL_UART_Transmit(&huart2, (uint8_t *) msg, strlen(msg), 1000);
 
     HAL_TIM_Base_Start_IT(&htim2);
-}
-
-//---------------------------------------
-// RTOS資源の生成
-// osKernelInitialize()後、osKernelStart()前に呼ぶ
-//---------------------------------------
-void CMX869B_RtosInit(void) {
-    IrqSemHandle = osSemaphoreNew(1, 0, NULL);
-    SpiMutexHandle = osMutexNew(NULL);
-    if (IrqSemHandle == NULL || SpiMutexHandle == NULL) {
-        Error_Handler();
-    }
-}
-
-//---------------------------------------
-// モデム割込の許可
-// 割込を受けるタスクでループに入る前に呼ぶ
-//---------------------------------------
-void CMX869B_EnableIrq(uint8_t mask) {
-    CMX869B_StatusReg_TypeDef st;
-    //IRQNがLowのまま残っていると立下りが来ないので、先に解除しておく
-    receive_status(&st);
-    __HAL_GPIO_EXTI_CLEAR_IT(MODEM_INT_Pin);
-    osSemaphoreAcquire(IrqSemHandle, 0);
-
-    GRE.Bits.IrqMask = mask;
-    send_cmd(GRE_ADDR, GRE.Bytes);
-}
-
-//---------------------------------------
-// モデム割込待ち
-// 割込が来たらosOK、タイムアウトならosErrorTimeout
-//---------------------------------------
-osStatus_t CMX869B_WaitIrq(uint32_t timeout) {
-    return osSemaphoreAcquire(IrqSemHandle, timeout);
-}
-
-//割込関数
-//SPIはここで触らず、RxTaskに通知するだけ
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-    if (GPIO_Pin == MODEM_INT_Pin && IrqSemHandle != NULL)
-    {
-        osSemaphoreRelease(IrqSemHandle);
-    }
 }
 
 //********************************************

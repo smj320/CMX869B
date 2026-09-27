@@ -22,8 +22,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "CMX869B.h"
 #include "task.h"
+#include "CMX869B.h"
+#include "HK.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,11 +52,16 @@ TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart2;
 
-/* Definitions for defaultTask */
-osThreadId_t defaultTaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
-  .stack_size = 128 * 4,
+/* Definitions for HKTask */
+osThreadId_t HKTaskHandle;
+uint32_t HKTaskBuffer[ 128 ];
+osStaticThreadDef_t HKTaskControlBlock;
+const osThreadAttr_t HKTask_attributes = {
+  .name = "HKTask",
+  .cb_mem = &HKTaskControlBlock,
+  .cb_size = sizeof(HKTaskControlBlock),
+  .stack_mem = &HKTaskBuffer[0],
+  .stack_size = sizeof(HKTaskBuffer),
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for CMX869bTask */
@@ -68,7 +74,7 @@ const osThreadAttr_t CMX869bTask_attributes = {
   .cb_size = sizeof(CMX869bTaskControlBlock),
   .stack_mem = &CMX869bTaskBuffer[0],
   .stack_size = sizeof(CMX869bTaskBuffer),
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityHigh,
 };
 /* USER CODE BEGIN PV */
 
@@ -81,7 +87,7 @@ static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM2_Init(void);
-void StartDefaultTask(void *argument);
+void StartHKTask(void *argument);
 void StartCMX869bTask(void *argument);
 
 /* USER CODE BEGIN PFP */
@@ -140,7 +146,6 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
-  CMX869B_RtosInit();
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
@@ -152,8 +157,8 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  /* creation of HKTask */
+  HKTaskHandle = osThreadNew(StartHKTask, NULL, &HKTask_attributes);
 
   /* creation of CMX869bTask */
   CMX869bTaskHandle = osThreadNew(StartCMX869bTask, NULL, &CMX869bTask_attributes);
@@ -375,7 +380,7 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 1200;
+  huart2.Init.BaudRate = 9600;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
@@ -454,21 +459,18 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_StartHKTask */
 /**
-  * @brief  Function implementing the defaultTask thread.
+  * @brief  Function implementing the HKTask thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
+/* USER CODE END Header_StartHKTask */
+void StartHKTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
+  HKTaskLoop();
   /* USER CODE END 5 */
 }
 
@@ -505,10 +507,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
+  static int count = 0;
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   if (htim->Instance == TIM2)
   {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     vTaskNotifyGiveFromISR(CMX869bTaskHandle, &xHigherPriorityTaskWoken);
+    if (count++ == 1800) {
+      vTaskNotifyGiveFromISR(HKTaskHandle, &xHigherPriorityTaskWoken);
+      count=0;
+    }
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
   }
   /* USER CODE END Callback 1 */

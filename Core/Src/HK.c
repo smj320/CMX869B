@@ -29,6 +29,6 @@ void HKTaskLoop() {
         for (int i = 0; i < strlen((const char*)message); i++) {
             xQueueSend(txQueueHandle,&message[i],0);
         }
-        //TX割込許可
+        tx_int_enable();
     }
 }

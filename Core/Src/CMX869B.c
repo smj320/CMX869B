@@ -24,10 +24,10 @@ uint8_t SPI_Buffer[SPI_BUFFER_SIZE];
 //
 volatile uint8_t UART2_rxBuffer[1];
 //
-static CMX869B_GRE_TypeDef GRE = {0};
-static CMX869B_TxReg_TypeDef TxReg = {0};
-static CMX869B_RxReg_TypeDef RxReg = {0};
-static CMX869B_QamReg_TypeDef QamReg = {0};
+CMX869B_GRE_TypeDef GRE = {0};
+CMX869B_TxReg_TypeDef TxReg = {0};
+CMX869B_RxReg_TypeDef RxReg = {0};
+CMX869B_QamReg_TypeDef QamReg = {0};
 //
 static CMX869B_StatusReg_TypeDef StatusReg = {0};
 static CMX869B_QamStatusReg_TypeDef QamStatusReg = {0};
@@ -102,6 +102,16 @@ int receive_data(uint8_t *st) {
     Status = spi_rx(2, buffer);
     *st = buffer[1];
     return 0;
+}
+
+void tx_int_enable(void) {
+    GRE.Bits.IrqMask = 0b001001;
+    send_cmd(GRE_ADDR, GRE.Bytes);
+}
+
+void tx_int_disable(void) {
+    GRE.Bits.IrqMask = 0b000001;
+    send_cmd(GRE_ADDR, GRE.Bytes);
 }
 //---------------------------------------
 // 初期化
@@ -234,11 +244,11 @@ void CMX869BbTaskLoop() {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
         receive_status(&StatusReg);
-        //TxReadyでtxQueが空でなければ送信
+        //TxReadyでtxQueがあれば送信
         //最後のデータを送る前に送信割込禁止にする
+        tx_int_disable();
 
         //GSEモードの場合
-        receive_status(&StatusReg);
         if (MODEM_MODE_GSE == 1) {
             //受信データがあればUARTに流す
         }else {

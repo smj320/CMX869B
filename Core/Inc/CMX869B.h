@@ -133,5 +133,6 @@ osStatus_t CMX869B_WaitIrq(uint32_t timeout);
 int receive_status(CMX869B_StatusReg_TypeDef *st);
 int send_data(uint8_t data);
 int receive_data(uint8_t *st);
+void CMX869BbTaskLoop();
 
 #endif //CMX869B_CMX869B_H

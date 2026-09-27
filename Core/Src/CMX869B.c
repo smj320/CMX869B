@@ -7,9 +7,11 @@
 #include <string.h>
 #include "main.h"
 #include "cmsis_os.h"
+#include "task.h"
 
 extern SPI_HandleTypeDef hspi1;
 extern UART_HandleTypeDef huart2;
+extern TIM_HandleTypeDef htim2;
 HAL_StatusTypeDef Status;
 
 #define SPI_BUFFER_SIZE 4
@@ -216,6 +218,8 @@ void CMX869B_Init(void) {
 
     const char *msg = "Hello, CMX869B!\n\r";
     HAL_UART_Transmit(&huart2, (uint8_t *) msg, strlen(msg), 1000);
+
+    HAL_TIM_Base_Start_IT(&htim2);
 }
 
 //---------------------------------------
@@ -260,5 +264,17 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     if (GPIO_Pin == MODEM_INT_Pin && IrqSemHandle != NULL)
     {
         osSemaphoreRelease(IrqSemHandle);
+    }
+}
+
+//********************************************
+// モデム監視タスクループ
+// 1800Hzの割込から起動される
+//********************************************
+void CMX869BbTaskLoop() {
+    CMX869B_Init();
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
     }
 }

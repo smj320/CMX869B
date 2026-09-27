@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "CMX869B.h"
+#include "task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,6 +47,8 @@ I2C_HandleTypeDef hi2c1;
 
 SPI_HandleTypeDef hspi1;
 
+TIM_HandleTypeDef htim2;
+
 UART_HandleTypeDef huart2;
 
 /* Definitions for defaultTask */
@@ -55,28 +58,16 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for RxTask */
-osThreadId_t RxTaskHandle;
-uint32_t RxTaskBuffer[ 128 ];
-osStaticThreadDef_t RxTaskControlBlock;
-const osThreadAttr_t RxTask_attributes = {
-  .name = "RxTask",
-  .cb_mem = &RxTaskControlBlock,
-  .cb_size = sizeof(RxTaskControlBlock),
-  .stack_mem = &RxTaskBuffer[0],
-  .stack_size = sizeof(RxTaskBuffer),
-  .priority = (osPriority_t) osPriorityLow,
-};
-/* Definitions for TxTask */
-osThreadId_t TxTaskHandle;
-uint32_t TxTaskBuffer[ 128 ];
-osStaticThreadDef_t TxTaskControlBlock;
-const osThreadAttr_t TxTask_attributes = {
-  .name = "TxTask",
-  .cb_mem = &TxTaskControlBlock,
-  .cb_size = sizeof(TxTaskControlBlock),
-  .stack_mem = &TxTaskBuffer[0],
-  .stack_size = sizeof(TxTaskBuffer),
+/* Definitions for CMX869bTask */
+osThreadId_t CMX869bTaskHandle;
+uint32_t CMX869bTaskBuffer[ 128 ];
+osStaticThreadDef_t CMX869bTaskControlBlock;
+const osThreadAttr_t CMX869bTask_attributes = {
+  .name = "CMX869bTask",
+  .cb_mem = &CMX869bTaskControlBlock,
+  .cb_size = sizeof(CMX869bTaskControlBlock),
+  .stack_mem = &CMX869bTaskBuffer[0],
+  .stack_size = sizeof(CMX869bTaskBuffer),
   .priority = (osPriority_t) osPriorityLow,
 };
 /* USER CODE BEGIN PV */
@@ -89,9 +80,9 @@ static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_TIM2_Init(void);
 void StartDefaultTask(void *argument);
-void StartRxTask(void *argument);
-void StartTxTask(void *argument);
+void StartCMX869bTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -119,7 +110,9 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
+  // OpenOCDのreset-initがPLL(HSI x16)をSYSCLKにしているので、
+  // そのままだとSystemClock_Config()のPLL再設定がHAL_ERRORになる。HSIに戻しておく
+  HAL_RCC_DeInit();
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -134,8 +127,8 @@ int main(void)
   MX_I2C1_Init();
   MX_SPI1_Init();
   MX_USART2_UART_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  CMX869B_Init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -162,11 +155,8 @@ int main(void)
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
-  /* creation of RxTask */
-  RxTaskHandle = osThreadNew(StartRxTask, NULL, &RxTask_attributes);
-
-  /* creation of TxTask */
-  TxTaskHandle = osThreadNew(StartTxTask, NULL, &TxTask_attributes);
+  /* creation of CMX869bTask */
+  CMX869bTaskHandle = osThreadNew(StartCMX869bTask, NULL, &CMX869bTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -207,7 +197,9 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL8;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -217,8 +209,8 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV4;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
@@ -227,7 +219,7 @@ void SystemClock_Config(void)
     Error_Handler();
   }
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_I2C1;
-  PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_HSI;
+  PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_SYSCLK;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
@@ -250,7 +242,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x00201D2B;
+  hi2c1.Init.Timing = 0x00B07CB4;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -323,6 +315,51 @@ static void MX_SPI1_Init(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 1;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 4444;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -374,13 +411,17 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : MODEM_MODE_Pin */
-  GPIO_InitStruct.Pin = MODEM_MODE_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  /*Configure GPIO pin : CPU_MON_Pin */
+  GPIO_InitStruct.Pin = CPU_MON_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(MODEM_MODE_GPIO_Port, &GPIO_InitStruct);
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(CPU_MON_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : MODEM_CS_Pin */
   GPIO_InitStruct.Pin = MODEM_CS_Pin;
@@ -394,6 +435,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(MODEM_INT_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : MODEM_MODE_Pin */
+  GPIO_InitStruct.Pin = MODEM_MODE_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(MODEM_MODE_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
@@ -425,52 +472,46 @@ void StartDefaultTask(void *argument)
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_StartRxTask */
+/* USER CODE BEGIN Header_StartCMX869bTask */
 /**
-* @brief Function implementing the RxTask thread.
+* @brief Function implementing the CMX869bTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartRxTask */
-void StartRxTask(void *argument)
+/* USER CODE END Header_StartCMX869bTask */
+void StartCMX869bTask(void *argument)
 {
-  /* USER CODE BEGIN StartRxTask */
-  CMX869B_StatusReg_TypeDef st;
-  uint8_t rx;
-
-  //RxDataReady / RxDataOverflow で割込
-  CMX869B_EnableIrq(0b000001);
+  /* USER CODE BEGIN StartCMX869bTask */
   /* Infinite loop */
-  for(;;)
-  {
-    CMX869B_WaitIrq(osWaitForever);
-    receive_status(&st);  //IRQNを解除
-    if (st.Bits.RxDataReady || st.Bits.RxDataOverflow) {
-      receive_data(&rx);
-      HAL_UART_Transmit(&huart2, &rx, 1, 100);
-    }
-  }
-  /* USER CODE END StartRxTask */
+  CMX869BbTaskLoop();
+  /* USER CODE END StartCMX869bTask */
 }
 
-/* USER CODE BEGIN Header_StartTxTask */
 /**
-* @brief Function implementing the TxTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartTxTask */
-void StartTxTask(void *argument)
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM6 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-  /* USER CODE BEGIN StartTxTask */
-  /* Infinite loop */
-  for(;;)
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM6)
   {
-    //ループバック試験(GRE.LB=1)：1秒ごとに'U'を送り、RxTaskがUARTに流す
-    send_data(0x55);
-    osDelay(1000);
+    HAL_IncTick();
   }
-  /* USER CODE END StartTxTask */
+  /* USER CODE BEGIN Callback 1 */
+  if (htim->Instance == TIM2)
+  {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    vTaskNotifyGiveFromISR(CMX869bTaskHandle, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  }
+  /* USER CODE END Callback 1 */
 }
 
 /**

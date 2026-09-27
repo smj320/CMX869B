@@ -23,19 +23,21 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "task.h"
+#include "stream_buffer.h"
 #include "CMX869B.h"
 #include "HK.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 typedef StaticTask_t osStaticThreadDef_t;
+typedef StaticQueue_t osStaticMessageQDef_t;
 /* USER CODE BEGIN PTD */
 
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+int MODEM_MODE_GSE = 0;
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -76,8 +78,29 @@ const osThreadAttr_t CMX869bTask_attributes = {
   .stack_size = sizeof(CMX869bTaskBuffer),
   .priority = (osPriority_t) osPriorityHigh,
 };
+/* Definitions for txQueue */
+osMessageQueueId_t txQueueHandle;
+uint8_t txQueueBuffer[ 80 * sizeof( uint16_t ) ];
+osStaticMessageQDef_t txQueueControlBlock;
+const osMessageQueueAttr_t txQueue_attributes = {
+  .name = "txQueue",
+  .cb_mem = &txQueueControlBlock,
+  .cb_size = sizeof(txQueueControlBlock),
+  .mq_mem = &txQueueBuffer,
+  .mq_size = sizeof(txQueueBuffer)
+};
+/* Definitions for rxQueue */
+osMessageQueueId_t rxQueueHandle;
+uint8_t rxQueueBuffer[ 80 * sizeof( uint16_t ) ];
+osStaticMessageQDef_t rxQueueControlBlock;
+const osMessageQueueAttr_t rxQueue_attributes = {
+  .name = "rxQueue",
+  .cb_mem = &rxQueueControlBlock,
+  .cb_size = sizeof(rxQueueControlBlock),
+  .mq_mem = &rxQueueBuffer,
+  .mq_size = sizeof(rxQueueBuffer)
+};
 /* USER CODE BEGIN PV */
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -135,6 +158,10 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
+  //ジャンパークローズの場合はGSE
+  if (GPIO_PIN_RESET == HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin)) {
+    MODEM_MODE_GSE = 1;
+  }
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -151,6 +178,13 @@ int main(void)
   /* USER CODE BEGIN RTOS_TIMERS */
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
+
+  /* Create the queue(s) */
+  /* creation of txQueue */
+  txQueueHandle = osMessageQueueNew (80, sizeof(uint16_t), &txQueue_attributes);
+
+  /* creation of rxQueue */
+  rxQueueHandle = osMessageQueueNew (80, sizeof(uint16_t), &rxQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -340,7 +374,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4444;
+  htim2.Init.Period = 5000;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -419,7 +453,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin : CPU_MON_Pin */
   GPIO_InitStruct.Pin = CPU_MON_Pin;
@@ -456,7 +490,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartHKTask */
@@ -511,8 +544,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   if (htim->Instance == TIM2)
   {
-    vTaskNotifyGiveFromISR(CMX869bTaskHandle, &xHigherPriorityTaskWoken);
-    if (count++ == 1800) {
+    if (count%10==0) {
+      vTaskNotifyGiveFromISR(CMX869bTaskHandle, &xHigherPriorityTaskWoken);
+    }
+    if (count++ == 250) {
       vTaskNotifyGiveFromISR(HKTaskHandle, &xHigherPriorityTaskWoken);
       count=0;
     }

@@ -1,6 +1,16 @@
 # CMX869B
 
 
+## モデムへの流入経路
+
+地上系
+UART2のRXDにデータがあれば、CMX869bのTXDに書き込む
+CMX869bのRXDにデータがあれば、UART2のTXDに書き込む
+
+ドリル系
+ドリルはTXD_FIFOにデータがあればCMX869bのTXDに書き込む
+CMX869bのRXDにデータがあれば、コマンドデコードを行う
+
 ## タイマの用途
 RTOSなしの場合、HAL_delay()関数はSysTickを使う。RTOSがあるときは
 OSがSysTickを使い、HAL_delay()はCubeMXのSysでTimebase Source

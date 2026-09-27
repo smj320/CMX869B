@@ -249,7 +249,7 @@ void CMX869BbTaskLoop() {
             if (StatusReg.Bits.RxDataReady == 1) {
                 receive_data(&tx_char);
                 //huart2.Instance->TDR = tx_char;
-                HAL_UART_Transmit(&huart2, &tx_char, 1, HAL_MAX_DELAY);
+                HAL_UART_Transmit(&huart2, &tx_char, 1, 10);
             }
         }else {
             // HKはTXストリームバッファにデータを書き込む
@@ -259,7 +259,7 @@ void CMX869BbTaskLoop() {
             if (StatusReg.Bits.RxDataReady == 1) {
                 receive_data(&tx_char);
                 //huart2.Instance->TDR = tx_char;
-                HAL_UART_Transmit(&huart2, &tx_char, 1, HAL_MAX_DELAY);
+                HAL_UART_Transmit(&huart2, &tx_char, 1, 10);
             }
         }
     }

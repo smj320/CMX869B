@@ -19,7 +19,7 @@ static CMX869B_StatusReg_TypeDef StatusReg = {0};
 // 1800Hzの割込から起動される
 //********************************************
 void HKTaskLoop() {
-    uint8_t message[] = "A";
+    uint8_t message;
     for (;;) {
         //INTからのウェイクアップを待機
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
@@ -28,9 +28,12 @@ void HKTaskLoop() {
         HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
 
         //TXキューにデータを書き込む
-        for (int i = 0; i < strlen((const char*)message); i++) {
+        for (int i = 0; i < 80; i++) {
             //xQueueSend(txQueueHandle,&message[i],0);
-            send_data(message[i]);
+            message = '0' + i%10;
+            send_data(message);
+            //20だとうまくいく。15だと途中でとまり、10だとゴミが入る。
+            osDelay(11);
         }
         //tx_int_enable();
     }

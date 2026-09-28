@@ -216,10 +216,12 @@ void CMX869B_Init(void) {
     //set_v22_loop();
 
     //起動直後にはRXDにゴミが入っているので除去
+    /*
     uint8_t rx_data;
     receive_status(&StatusReg);
     receive_data(&rx_data);
     receive_status(&StatusReg);
+    */
 
     //ポーリングタスク開始
     HAL_TIM_Base_Start_IT(&htim2);
@@ -238,28 +240,41 @@ void CMX869B_Init(void) {
 // CMX869bのRXDにデータがあれば、コマンドデコードを行う
 //********************************************
 void CMX869BbTaskLoop() {
+    uint8_t received_data;
     CMX869B_Init();
     for (;;) {
         //待機
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
+        //割込要因解析
         receive_status(&StatusReg);
-        //TxReadyでtxQueがあれば送信
-        //最後のデータを送る前に送信割込禁止にする
-        tx_int_disable();
 
-        //GSEモードの場合
-        if (MODEM_MODE_GSE == 1) {
-            //受信データがあればUARTに流す
-        }else {
-            //受信データがあればUコマンド解析に回す
+        //データがきていれば受信
+        if (StatusReg.Bits.RxDataReady==1) {
+            receive_data(&received_data);
+            if (MODEM_MODE_GSE == 1) {
+                //受信データがあればUARTに流す
+                HAL_UART_Transmit(&huart2, &received_data, 1, 100);
+            }else {
+                //受信データがあればUコマンド解析に回す
+                HAL_UART_Transmit(&huart2, &received_data, 1, 100);
+            }
         }
+
+        //TxReadyでtxQueがあれば送信
+        /*
+        if (StatusReg.Bits.TxDataReady==1) {
+            if (xQueueReceive(txQueueHandle, &received_data, portMAX_DELAY) == pdPASS) {
+                send_data(received_data);
+            }
+        }*/
     }
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     if (GPIO_Pin == MODEM_INT_Pin) {
+        HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         vTaskNotifyGiveFromISR(CMX869bTaskHandle, &xHigherPriorityTaskWoken);
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }

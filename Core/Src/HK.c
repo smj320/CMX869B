@@ -15,26 +15,19 @@ extern osMessageQueueId_t rxQueueHandle;
 static CMX869B_StatusReg_TypeDef StatusReg = {0};
 
 //********************************************
-// モデム監視タスクループ
-// 1800Hzの割込から起動される
+// HK生成とか
 //********************************************
-void HKTaskLoop() {
-    uint8_t message;
-    for (;;) {
-        //INTからのウェイクアップを待機
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+void StartvHkTask(void *argument)
+{
+    const uint32_t period =1000; // 1秒（1000ms）周期
+    uint32_t tick = osKernelGetTickCount();
 
+    for (;;) {
         //ハートビート確認
         HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
 
-        //TXキューにデータを書き込む
-        for (int i = 0; i < 80; i++) {
-            //xQueueSend(txQueueHandle,&message[i],0);
-            message = '0' + i%10;
-            send_data(message);
-            //20だとうまくいく。15だと途中でとまり、10だとゴミが入る。
-            osDelay(11);
-        }
-        //tx_int_enable();
+        //周期待機
+        tick += period;
+        osDelayUntil(tick);
     }
 }

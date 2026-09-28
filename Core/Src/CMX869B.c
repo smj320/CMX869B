@@ -8,7 +8,6 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "task.h"
-#include "queue.h"
 
 extern SPI_HandleTypeDef hspi1;
 extern UART_HandleTypeDef huart2;
@@ -39,15 +38,17 @@ extern int MODEM_MODE_GSE;
 //---------------------------------------
 int spi_tx(uint8_t len, uint8_t tx_data[]) {
     // 1. CSをLOWにする
+    vTaskSuspendAll();
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
 
     // SPI送信の実行
-    if (HAL_SPI_Transmit(&hspi1, tx_data, len, 10) != HAL_OK)
+    if ((Status = HAL_SPI_Transmit(&hspi1, tx_data, len, 10)) != HAL_OK)
     {
         // エラー処理
         Error_Handler();
     }
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_SET);
+    xTaskResumeAll();
     return Status;
 }
 
@@ -58,6 +59,7 @@ int spi_tx(uint8_t len, uint8_t tx_data[]) {
 int spi_rx(const uint8_t len, uint8_t rx_data[]) {
     HAL_StatusTypeDef st;
     //CS=0
+    vTaskSuspendAll();
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
 
     if ((st=HAL_SPI_Receive(&hspi1, rx_data, len, 10)) != HAL_OK)
@@ -67,6 +69,7 @@ int spi_rx(const uint8_t len, uint8_t rx_data[]) {
     }
     //CS=1
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_SET);
+    xTaskResumeAll();
     return Status;
 }
 
@@ -104,15 +107,6 @@ int receive_data(uint8_t *st) {
     return 0;
 }
 
-void tx_int_enable(void) {
-    GRE.Bits.IrqMask = 0b001001;
-    send_cmd(GRE_ADDR, GRE.Bytes);
-}
-
-void tx_int_disable(void) {
-    GRE.Bits.IrqMask = 0b000001;
-    send_cmd(GRE_ADDR, GRE.Bytes);
-}
 //---------------------------------------
 // 初期化
 // 地上側受信　モデムの受信割込をUARTにながす
@@ -180,13 +174,15 @@ void set_auto_call(void) {
 }
 
 void set_autl_ans(void) {
-    RxReg.Bits.RxMode = RxReg_Mode_V22_ANS;
+    // TX
+    // RX
 }
 
 void CMX869B_Init(void) {
     //Reset
-    __HAL_SPI_ENABLE(&hspi1);
+    uint8_t rx_data;
     uint8_t dummy[] = {0,0};
+    __HAL_SPI_ENABLE(&hspi1);
 
     // グローバルリセット
     send_cmd(General_Reset,dummy);
@@ -206,8 +202,9 @@ void CMX869B_Init(void) {
     GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
-    GRE.Bits.IrqMask = 0b000001;
+    GRE.Bits.IrqMask = 0b000000; //!
     send_cmd(GRE_ADDR, GRE.Bytes);
+    receive_status(&StatusReg);
 
     // モデム送受信の設定
     set_bell();
@@ -215,67 +212,45 @@ void CMX869B_Init(void) {
     //set_v22_call();
     //set_v22_loop();
 
-    //起動直後にはRXDにゴミが入っているので除去
-    /*
-    uint8_t rx_data;
-    receive_status(&StatusReg);
+    //RxDataにゴミが入っているので除去して割込許可
     receive_data(&rx_data);
-    receive_status(&StatusReg);
-    */
+    GRE.Bits.IrqMask = 0b000001;
+    send_cmd(GRE_ADDR, GRE.Bytes);
 
-    //ポーリングタスク開始
-    HAL_TIM_Base_Start_IT(&htim2);
+    //確認
+    receive_status(&StatusReg);
 }
 
-//********************************************
-// モデム監視タスクループ
-// 1800Hzの割込から起動される
-// 地上系
-// UARTは受信割込でTXストリームバッファにデータを書き込む
-// TXストリームバッファにデータがあれば、CMX869bのTXDに書き込む
-// CMX869bのRXDにデータがあれば、UARTに出力する。
-// ドリル系
-// HKはTXストリームバッファにデータを書き込む
-// TXストリームバッファにデータがあれば、CMX869bのTXDに書き込む
-// CMX869bのRXDにデータがあれば、コマンドデコードを行う
-//********************************************
-void CMX869BbTaskLoop() {
-    uint8_t received_data;
+//-----------------------------------
+//単純ループでキューを送信
+//-----------------------------------
+void StartvTxTask(void *argument)
+{
+    int count = 0;
+    uint8_t tx_data = 0;
     CMX869B_Init();
-    for (;;) {
-        //待機
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        //割込要因解析
-        receive_status(&StatusReg);
-
-        //データがきていれば受信
-        if (StatusReg.Bits.RxDataReady==1) {
-            receive_data(&received_data);
-            if (MODEM_MODE_GSE == 1) {
-                //受信データがあればUARTに流す
-                HAL_UART_Transmit(&huart2, &received_data, 1, 100);
-            }else {
-                //受信データがあればUコマンド解析に回す
-                HAL_UART_Transmit(&huart2, &received_data, 1, 100);
-            }
-        }
-
-        //TxReadyでtxQueがあれば送信
-        /*
-        if (StatusReg.Bits.TxDataReady==1) {
-            if (xQueueReceive(txQueueHandle, &received_data, portMAX_DELAY) == pdPASS) {
-                send_data(received_data);
-            }
-        }*/
+    for(;;)
+    {
+        tx_data = '0'+(count++)%10;
+        send_data(tx_data);
+        osDelay(12);
     }
 }
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-    if (GPIO_Pin == MODEM_INT_Pin) {
-        HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        vTaskNotifyGiveFromISR(CMX869bTaskHandle, &xHigherPriorityTaskWoken);
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+//-----------------------------------
+//割込ハンドラを待ってデータ取得
+//-----------------------------------
+void StartvRxTask(void *argument)
+{
+    uint8_t rx_data;
+    for(;;)
+    {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        receive_status(&StatusReg);
+        if (StatusReg.Bits.RxDataReady==1) {
+            receive_data(&rx_data);
+            HAL_UART_Transmit(&huart2, &rx_data, 1, 100);
+        }
     }
 }

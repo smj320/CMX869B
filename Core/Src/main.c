@@ -23,14 +23,12 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "task.h"
-#include "stream_buffer.h"
 #include "CMX869B.h"
 #include "HK.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 typedef StaticTask_t osStaticThreadDef_t;
-typedef StaticQueue_t osStaticMessageQDef_t;
 /* USER CODE BEGIN PTD */
 
 /* USER CODE END PTD */
@@ -50,55 +48,43 @@ I2C_HandleTypeDef hi2c1;
 
 SPI_HandleTypeDef hspi1;
 
-TIM_HandleTypeDef htim2;
-
 UART_HandleTypeDef huart2;
 
-/* Definitions for HKTask */
-osThreadId_t HKTaskHandle;
-uint32_t HKTaskBuffer[ 128 ];
-osStaticThreadDef_t HKTaskControlBlock;
-const osThreadAttr_t HKTask_attributes = {
-  .name = "HKTask",
-  .cb_mem = &HKTaskControlBlock,
-  .cb_size = sizeof(HKTaskControlBlock),
-  .stack_mem = &HKTaskBuffer[0],
-  .stack_size = sizeof(HKTaskBuffer),
+/* Definitions for vHkTask */
+osThreadId_t vHkTaskHandle;
+uint32_t vHkTaskBuffer[ 128 ];
+osStaticThreadDef_t vHkTaskControlBlock;
+const osThreadAttr_t vHkTask_attributes = {
+  .name = "vHkTask",
+  .cb_mem = &vHkTaskControlBlock,
+  .cb_size = sizeof(vHkTaskControlBlock),
+  .stack_mem = &vHkTaskBuffer[0],
+  .stack_size = sizeof(vHkTaskBuffer),
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for CMX869bTask */
-osThreadId_t CMX869bTaskHandle;
-uint32_t CMX869bTaskBuffer[ 128 ];
-osStaticThreadDef_t CMX869bTaskControlBlock;
-const osThreadAttr_t CMX869bTask_attributes = {
-  .name = "CMX869bTask",
-  .cb_mem = &CMX869bTaskControlBlock,
-  .cb_size = sizeof(CMX869bTaskControlBlock),
-  .stack_mem = &CMX869bTaskBuffer[0],
-  .stack_size = sizeof(CMX869bTaskBuffer),
+/* Definitions for vRxTask */
+osThreadId_t vRxTaskHandle;
+uint32_t vRxTaskBuffer[ 128 ];
+osStaticThreadDef_t vRxTaskControlBlock;
+const osThreadAttr_t vRxTask_attributes = {
+  .name = "vRxTask",
+  .cb_mem = &vRxTaskControlBlock,
+  .cb_size = sizeof(vRxTaskControlBlock),
+  .stack_mem = &vRxTaskBuffer[0],
+  .stack_size = sizeof(vRxTaskBuffer),
   .priority = (osPriority_t) osPriorityHigh,
 };
-/* Definitions for txQueue */
-osMessageQueueId_t txQueueHandle;
-uint8_t txQueueBuffer[ 80 * sizeof( uint16_t ) ];
-osStaticMessageQDef_t txQueueControlBlock;
-const osMessageQueueAttr_t txQueue_attributes = {
-  .name = "txQueue",
-  .cb_mem = &txQueueControlBlock,
-  .cb_size = sizeof(txQueueControlBlock),
-  .mq_mem = &txQueueBuffer,
-  .mq_size = sizeof(txQueueBuffer)
-};
-/* Definitions for rxQueue */
-osMessageQueueId_t rxQueueHandle;
-uint8_t rxQueueBuffer[ 80 * sizeof( uint16_t ) ];
-osStaticMessageQDef_t rxQueueControlBlock;
-const osMessageQueueAttr_t rxQueue_attributes = {
-  .name = "rxQueue",
-  .cb_mem = &rxQueueControlBlock,
-  .cb_size = sizeof(rxQueueControlBlock),
-  .mq_mem = &rxQueueBuffer,
-  .mq_size = sizeof(rxQueueBuffer)
+/* Definitions for vTxTask */
+osThreadId_t vTxTaskHandle;
+uint32_t vTxTaskBuffer[ 128 ];
+osStaticThreadDef_t vTxTaskControlBlock;
+const osThreadAttr_t vTxTask_attributes = {
+  .name = "vTxTask",
+  .cb_mem = &vTxTaskControlBlock,
+  .cb_size = sizeof(vTxTaskControlBlock),
+  .stack_mem = &vTxTaskBuffer[0],
+  .stack_size = sizeof(vTxTaskBuffer),
+  .priority = (osPriority_t) osPriorityLow,
 };
 /* USER CODE BEGIN PV */
 /* USER CODE END PV */
@@ -109,9 +95,9 @@ static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
-static void MX_TIM2_Init(void);
-void StartHKTask(void *argument);
-void StartCMX869bTask(void *argument);
+void StartvHkTask(void *argument);
+void StartvRxTask(void *argument);
+void StartvTxTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -156,12 +142,13 @@ int main(void)
   MX_I2C1_Init();
   MX_SPI1_Init();
   MX_USART2_UART_Init();
-  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   //ジャンパークローズの場合はGSE
   if (GPIO_PIN_RESET == HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin)) {
     MODEM_MODE_GSE = 1;
   }
+  // モデム初期化
+  CMX869B_Init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -179,23 +166,19 @@ int main(void)
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
-  /* Create the queue(s) */
-  /* creation of txQueue */
-  txQueueHandle = osMessageQueueNew (80, sizeof(uint16_t), &txQueue_attributes);
-
-  /* creation of rxQueue */
-  rxQueueHandle = osMessageQueueNew (80, sizeof(uint16_t), &rxQueue_attributes);
-
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of HKTask */
-  HKTaskHandle = osThreadNew(StartHKTask, NULL, &HKTask_attributes);
+  /* creation of vHkTask */
+  vHkTaskHandle = osThreadNew(StartvHkTask, NULL, &vHkTask_attributes);
 
-  /* creation of CMX869bTask */
-  CMX869bTaskHandle = osThreadNew(StartCMX869bTask, NULL, &CMX869bTask_attributes);
+  /* creation of vRxTask */
+  vRxTaskHandle = osThreadNew(StartvRxTask, NULL, &vRxTask_attributes);
+
+  /* creation of vTxTask */
+  vTxTaskHandle = osThreadNew(StartvTxTask, NULL, &vTxTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -354,51 +337,6 @@ static void MX_SPI1_Init(void)
 }
 
 /**
-  * @brief TIM2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM2_Init(void)
-{
-
-  /* USER CODE BEGIN TIM2_Init 0 */
-
-  /* USER CODE END TIM2_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM2_Init 1 */
-
-  /* USER CODE END TIM2_Init 1 */
-  htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 8000;
-  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 1000;
-  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM2_Init 2 */
-
-  /* USER CODE END TIM2_Init 2 */
-
-}
-
-/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -490,16 +428,26 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+// ------------------------------------------
+// モデム割込の処理
+// ------------------------------------------
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+  if (GPIO_Pin == MODEM_INT_Pin) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    vTaskNotifyGiveFromISR(vRxTaskHandle, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  }
+}
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartHKTask */
+/* USER CODE BEGIN Header_StartvHkTask */
 /**
-  * @brief  Function implementing the HKTask thread.
+  * @brief  Function implementing the vHkTask thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartHKTask */
-void StartHKTask(void *argument)
+/* USER CODE END Header_StartvHkTask */
+__weak void StartvHkTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
@@ -507,19 +455,40 @@ void StartHKTask(void *argument)
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_StartCMX869bTask */
+/* USER CODE BEGIN Header_StartvRxTask */
 /**
-* @brief Function implementing the CMX869bTask thread.
+* @brief Function implementing the vRxTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartCMX869bTask */
-void StartCMX869bTask(void *argument)
+/* USER CODE END Header_StartvRxTask */
+__weak void StartvRxTask(void *argument)
 {
-  /* USER CODE BEGIN StartCMX869bTask */
+  /* USER CODE BEGIN StartvRxTask */
   /* Infinite loop */
-  CMX869BbTaskLoop();
-  /* USER CODE END StartCMX869bTask */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartvRxTask */
+}
+
+/* USER CODE BEGIN Header_StartvTxTask */
+/**
+* @brief Function implementing the vTxTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartvTxTask */
+__weak void StartvTxTask(void *argument)
+{
+  /* USER CODE BEGIN StartvTxTask */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartvTxTask */
 }
 
 /**
@@ -540,13 +509,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-  if (htim->Instance == TIM2)
-  {
-    //HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    vTaskNotifyGiveFromISR(HKTaskHandle, &xHigherPriorityTaskWoken);
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-  }
   /* USER CODE END Callback 1 */
 }
 

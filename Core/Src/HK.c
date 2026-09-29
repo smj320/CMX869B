@@ -13,6 +13,8 @@ extern osMessageQueueId_t rxQueueHandle;
 //
 static CMX869B_StatusReg_TypeDef StatusReg = {0};
 //
+extern int Ptr;
+//
 //********************************************
 // HK生成とか
 //********************************************
@@ -24,7 +26,6 @@ void StartvHkTask(void *argument) {
         //ハートビート確認
         //HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
         //ステータス確認
-        send_data('A');
         tick += period;
         osDelayUntil(tick);
     }

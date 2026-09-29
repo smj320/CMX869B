@@ -89,7 +89,7 @@ typedef union {
         uint16_t b8_RightJustify : 1;      // b8
         uint16_t b9_FrameSyncDetect : 1;   // b9
         uint16_t EnergyDetect : 1;         // b10
-        uint16_t TxDataOverflow : 1;       // b11　MASK b03
+        uint16_t TxDataUnderflow : 1;       // b11　MASK b03
         uint16_t TxDataReady : 1;          // b12　MASK b03
         uint16_t ProgrammingFlag : 1;      // b13
         uint16_t RingDetect : 1;           // b14

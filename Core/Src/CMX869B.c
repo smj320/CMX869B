@@ -30,7 +30,8 @@ CMX869B_QamReg_TypeDef QamReg = {0};
 //
 static CMX869B_StatusReg_TypeDef StatusReg = {0};
 static CMX869B_QamStatusReg_TypeDef QamStatusReg = {0};
-
+int Ptr = 80;
+int N_ptr = 80;
 //
 extern int MODEM_MODE_GSE;
 //---------------------------------------
@@ -222,8 +223,9 @@ void CMX869B_Init(void) {
 
     //RxDataにゴミが入っているので除去して割込許可
     receive_data(&rx_data);
-    GRE.Bits.IrqMask = 0b000001;
+    GRE.Bits.IrqMask = 0b000000;
     send_cmd(GRE_ADDR, GRE.Bytes);
+    HAL_TIM_Base_Start_IT(&htim2);
 }
 
 //-----------------------------------
@@ -245,18 +247,27 @@ void StartvTxTask(void *argument) {
 //割込ハンドラを待ってデータ取得
 //-----------------------------------
 void StartvRxTask(void *argument) {
-    uint8_t rx_data='B';
-    uint8_t tx_data='K';
+    uint8_t rx_data='A';
+    uint8_t tx_data='0';
+    static int count = 0;
     for (;;) {
         //受信割込待機
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
         //ステータス受信
         receive_status(&StatusReg);
+        //xprintf("%d\r\n",StatusReg.Bits.RxDataReady);
+        //送信
+        if (StatusReg.Bits.TxDataReady==1) {
+            tx_data = '0'+(count++)%10;
+            send_data(tx_data);
+        }
         //受信
         if (StatusReg.Bits.RxDataReady==1) {
             receive_data(&rx_data);
             xprintf("%c",rx_data);
         }
+        HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
     }
 }
 

@@ -131,6 +131,7 @@ void CMX869B_EnableIrq(uint8_t mask);
 osStatus_t CMX869B_WaitIrq(uint32_t timeout);
 
 int receive_status(CMX869B_StatusReg_TypeDef *st);
+int receive_gre(CMX869B_GRE_TypeDef *st);
 int send_data(uint8_t data);
 int receive_data(uint8_t *st);
 void tx_int_enable(void);

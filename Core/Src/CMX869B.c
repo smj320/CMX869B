@@ -8,6 +8,7 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "task.h"
+#include "xprintf.h"
 
 extern SPI_HandleTypeDef hspi1;
 extern UART_HandleTypeDef huart2;
@@ -42,8 +43,7 @@ int spi_tx(uint8_t len, uint8_t tx_data[]) {
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
 
     // SPI送信の実行
-    if ((Status = HAL_SPI_Transmit(&hspi1, tx_data, len, 10)) != HAL_OK)
-    {
+    if ((Status = HAL_SPI_Transmit(&hspi1, tx_data, len, 10)) != HAL_OK) {
         // エラー処理
         Error_Handler();
     }
@@ -62,8 +62,7 @@ int spi_rx(const uint8_t len, uint8_t rx_data[]) {
     vTaskSuspendAll();
     HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
 
-    if ((st=HAL_SPI_Receive(&hspi1, rx_data, len, 10)) != HAL_OK)
-    {
+    if ((st = HAL_SPI_Receive(&hspi1, rx_data, len, 10)) != HAL_OK) {
         // エラー処理
         Error_Handler();
     }
@@ -80,7 +79,7 @@ int send_cmd(uint8_t addr, uint8_t Bytes[]) {
     uint8_t buffer[] = {addr, Bytes[1], Bytes[0]};
     if (addr == General_Reset) {
         spi_tx(1, buffer);
-    }else {
+    } else {
         spi_tx(3, buffer);
     }
     return 0;
@@ -88,6 +87,14 @@ int send_cmd(uint8_t addr, uint8_t Bytes[]) {
 
 int receive_status(CMX869B_StatusReg_TypeDef *st) {
     uint8_t buffer[] = {StatusReg_ADDR, 0xFF, 0xFF};
+    Status = spi_rx(3, buffer);
+    st->Bytes[0] = buffer[2];
+    st->Bytes[1] = buffer[1];
+    return 0;
+}
+
+int receive_gre(CMX869B_GRE_TypeDef *st) {
+    uint8_t buffer[] = {GRE_ADDR, 0xFF, 0xFF};
     Status = spi_rx(3, buffer);
     st->Bytes[0] = buffer[2];
     st->Bytes[1] = buffer[1];
@@ -126,6 +133,7 @@ void set_bell(void) {
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
     send_cmd(RxReg_ADDR, RxReg.Bytes);
 }
+
 // 2400 bps 全二重
 // ネゴシエーション不用なので、ブチ切りでもいける。
 void set_v22_call(void) {
@@ -181,11 +189,11 @@ void set_autl_ans(void) {
 void CMX869B_Init(void) {
     //Reset
     uint8_t rx_data;
-    uint8_t dummy[] = {0,0};
+    uint8_t dummy[] = {0, 0};
     __HAL_SPI_ENABLE(&hspi1);
 
     // グローバルリセット
-    send_cmd(General_Reset,dummy);
+    send_cmd(General_Reset, dummy);
 
     //バス動作確認。Ring DetectがLOWだと1, Highだと0が返る
     receive_status(&StatusReg);
@@ -198,8 +206,8 @@ void CMX869B_Init(void) {
     GRE.Bits.Pwr = 1;
     GRE.Bits.HighGain = 1;
     GRE.Bits.PatDet = 1;
-    //GRE.Bits.LB = 0;
-    GRE.Bits.LB = 1;
+    GRE.Bits.LB = 0;
+    //GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
     GRE.Bits.IrqMask = 0b000000; //!
@@ -214,43 +222,55 @@ void CMX869B_Init(void) {
 
     //RxDataにゴミが入っているので除去して割込許可
     receive_data(&rx_data);
-    GRE.Bits.IrqMask = 0b000001;
+    GRE.Bits.IrqMask = 0b001000;
     send_cmd(GRE_ADDR, GRE.Bytes);
-
-    //確認
-    receive_status(&StatusReg);
 }
 
 //-----------------------------------
 //単純ループでキューを送信
 //-----------------------------------
-void StartvTxTask(void *argument)
-{
+void StartvTxTask(void *argument) {
     int count = 0;
     uint8_t tx_data = 0;
     CMX869B_Init();
 
-    for(;;)
-    {
-        tx_data = '0'+(count++)%10;
-        send_data(tx_data);
-        osDelay(12);
+    for (;;) {
+        //tx_data = '0'+(count++)%10;
+        //send_data(tx_data);
+        osDelay(10000);
     }
 }
 
 //-----------------------------------
 //割込ハンドラを待ってデータ取得
 //-----------------------------------
-void StartvRxTask(void *argument)
-{
-    uint8_t rx_data;
-    for(;;)
-    {
+void StartvRxTask(void *argument) {
+    int txd0, txf0;
+    static int cnt=0;
+    uint8_t rx_data = 'K';
+    for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        vTaskSuspendAll();
         receive_status(&StatusReg);
-        if (StatusReg.Bits.RxDataReady==1) {
-            receive_data(&rx_data);
-            HAL_UART_Transmit(&huart2, &rx_data, 1, 100);
-        }
+        txd0 = StatusReg.Bits.TxDataReady;
+        txf0 = StatusReg.Bits.TxDataOverflow;
+        xprintf("INT %d %d %d\r\n", txd0, txf0, cnt++);
+        xTaskResumeAll();
+        //if (StatusReg.Bits.TxDataReady==1) {
+        //    //send_data(rx_data);
+        //    receive_status(&StatusReg);
+        //}
     }
+}
+
+// *************************************
+// xprintf用の1文字入出力関数
+// *************************************
+void uart_putc(unsigned char ch) {
+    // 送信データレジスタが空（TXE: Transmit Data Register Empty）になるのを待つ
+    while (!(USART2->ISR & USART_ISR_TXE)) {
+        // 必要に応じて無限ループ防止用のカウンターなどを追加
+    }
+    // 送信データレジスタに直接書き込む
+    USART2->TDR = ch;
 }

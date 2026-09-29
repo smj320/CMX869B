@@ -22,6 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "xprintf.h"
 #include "task.h"
 #include "CMX869B.h"
 #include "HK.h"
@@ -143,6 +144,9 @@ int main(void)
   MX_SPI1_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+  //xprintfの出力関数を設定
+  void uart_putc(unsigned char ch);
+  xdev_out(uart_putc);
   //ジャンパークローズの場合はGSE
   if (GPIO_PIN_RESET == HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin)) {
     MODEM_MODE_GSE = 1;
@@ -429,13 +433,15 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 // ------------------------------------------
-// モデム割込の処理
+// モデム割込検知
 // ------------------------------------------
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
   if (GPIO_Pin == MODEM_INT_Pin) {
+    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     vTaskNotifyGiveFromISR(vRxTaskHandle, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
   }
 }
 /* USER CODE END 4 */

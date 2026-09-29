@@ -8,6 +8,15 @@
 ### ネイティブアクセス
 *((__IO uint8_t *)&hspi->Instance->DR) = (*hspi->pTxBuffPtr);
 
+### SEGGER RTTの起動
+.cfgファイルの末尾に
+```aiignore
+init
+rtt setup 0x20000000 0x20000 "SEGGER RTT"
+rtt start
+rtt server start 9090 0
+```
+を記入して、デバッガ起動後にtelenet localhost 9090 でモニタできる。
 
 ## モデムへの流入経路
 
@@ -111,3 +120,36 @@ CONFIGURE_DEPENDS を追加する。
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "Core/*.*" "Drivers/*.*" "Middlewares/*.*")
 ```
 
+## 割込考察
+
+## 予想動作と実際の動作
+送信割込
+割込禁止
+送信せずに監視
+割込を許可した場合、送信がなくても割込が出ることがあるか
+予想：でない→出なかった
+かからないとすれば、そのときのTxDataReadyの値は
+予想；レジスタに値が入れられる状態なので1になっていた。
+一文字送信実行
+送信実行直後のTxDataReadyは0か
+予想：バッファにデータは書き込めないので0
+結果:概ね0になっているが、すぐに１になっている場合もあった
+送信実行直後のTxDataOverflowは0か
+予想:０
+結果:0
+
+## 言えそうなこと
+割込を許可しただけでは、例えTxDataReady状態であっても割込は発生しない。
+１回書き込むと、TxDataReady=1で割込が発生する。初回ならTxDataUnderflow=0
+その後TxDataUnderflow=1が発生して再度割込が発生するが、こちらは廃棄でよい。
+ステータスを読むと割込線はHに戻る。さらにデータを書くと要因も消失する。
+・割込を許可
+・最初に一文字書く
+・割込が発生する。
+・TxDataReady=1なら次のデータを書く。
+・TxDataUnderflow=1の場合は無視。
+
+
+受信割込
+割込を許可した場合、受信がなくても割込が出ることがあるか
+その場合はOverflowか

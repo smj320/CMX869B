@@ -26,6 +26,7 @@
 #include "task.h"
 #include "CMX869B.h"
 #include "HK.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -144,15 +145,14 @@ int main(void)
   MX_SPI1_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  //xprintfの出力関数を設定
-  void uart_putc(unsigned char ch);
-  xdev_out(uart_putc);
   //ジャンパークローズの場合はGSE
   if (GPIO_PIN_RESET == HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin)) {
     MODEM_MODE_GSE = 1;
   }
   // モデム初期化
   CMX869B_Init();
+  void uart_putc(unsigned char c);
+  xdev_out(uart_putc);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -441,9 +441,10 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     vTaskNotifyGiveFromISR(vRxTaskHandle, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
   }
 }
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartvHkTask */

@@ -18,7 +18,6 @@ extern osMessageQueueId_t rxQueueHandle;
 extern osThreadId_t CMX869bTaskHandle;
 HAL_StatusTypeDef Status;
 
-
 #define SPI_BUFFER_SIZE 4
 uint8_t SPI_Buffer[SPI_BUFFER_SIZE];
 //
@@ -31,6 +30,7 @@ CMX869B_QamReg_TypeDef QamReg = {0};
 //
 static CMX869B_StatusReg_TypeDef StatusReg = {0};
 static CMX869B_QamStatusReg_TypeDef QamStatusReg = {0};
+
 //
 extern int MODEM_MODE_GSE;
 //---------------------------------------
@@ -206,11 +206,11 @@ void CMX869B_Init(void) {
     GRE.Bits.Pwr = 1;
     GRE.Bits.HighGain = 1;
     GRE.Bits.PatDet = 1;
-    GRE.Bits.LB = 0;
-    //GRE.Bits.LB = 1;
+    //GRE.Bits.LB = 0;
+    GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
-    GRE.Bits.IrqMask = 0b000000; //!
+    GRE.Bits.IrqMask = 0b000000;
     send_cmd(GRE_ADDR, GRE.Bytes);
     receive_status(&StatusReg);
 
@@ -222,7 +222,7 @@ void CMX869B_Init(void) {
 
     //RxDataにゴミが入っているので除去して割込許可
     receive_data(&rx_data);
-    GRE.Bits.IrqMask = 0b001000;
+    GRE.Bits.IrqMask = 0b000001;
     send_cmd(GRE_ADDR, GRE.Bytes);
 }
 
@@ -245,32 +245,26 @@ void StartvTxTask(void *argument) {
 //割込ハンドラを待ってデータ取得
 //-----------------------------------
 void StartvRxTask(void *argument) {
-    int txd0, txf0;
-    static int cnt=0;
-    uint8_t rx_data = 'K';
+    uint8_t rx_data='B';
+    uint8_t tx_data='K';
     for (;;) {
+        //受信割込待機
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        vTaskSuspendAll();
+        //ステータス受信
         receive_status(&StatusReg);
-        txd0 = StatusReg.Bits.TxDataReady;
-        txf0 = StatusReg.Bits.TxDataOverflow;
-        xprintf("INT %d %d %d\r\n", txd0, txf0, cnt++);
-        xTaskResumeAll();
-        //if (StatusReg.Bits.TxDataReady==1) {
-        //    //send_data(rx_data);
-        //    receive_status(&StatusReg);
-        //}
+        //受信
+        if (StatusReg.Bits.RxDataReady==1) {
+            receive_data(&rx_data);
+            xprintf("%c",rx_data);
+        }
     }
 }
 
-// *************************************
-// xprintf用の1文字入出力関数
-// *************************************
-void uart_putc(unsigned char ch) {
+void uart_putc(unsigned char c) {
     // 送信データレジスタが空（TXE: Transmit Data Register Empty）になるのを待つ
     while (!(USART2->ISR & USART_ISR_TXE)) {
         // 必要に応じて無限ループ防止用のカウンターなどを追加
     }
     // 送信データレジスタに直接書き込む
-    USART2->TDR = ch;
+    USART2->TDR = c;
 }

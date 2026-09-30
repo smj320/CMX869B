@@ -9,6 +9,7 @@
 #include "cmsis_os.h"
 #include "task.h"
 #include "xprintf.h"
+#include "SEGGER_RTT.h"
 
 extern SPI_HandleTypeDef hspi1;
 extern UART_HandleTypeDef huart2;
@@ -18,11 +19,6 @@ extern osMessageQueueId_t rxQueueHandle;
 extern osThreadId_t CMX869bTaskHandle;
 HAL_StatusTypeDef Status;
 
-#define SPI_BUFFER_SIZE 4
-uint8_t SPI_Buffer[SPI_BUFFER_SIZE];
-//
-volatile uint8_t UART2_rxBuffer[1];
-//
 CMX869B_GRE_TypeDef GRE = {0};
 CMX869B_TxReg_TypeDef TxReg = {0};
 CMX869B_RxReg_TypeDef RxReg = {0};
@@ -30,8 +26,6 @@ CMX869B_QamReg_TypeDef QamReg = {0};
 //
 static CMX869B_StatusReg_TypeDef StatusReg = {0};
 static CMX869B_QamStatusReg_TypeDef QamStatusReg = {0};
-int Ptr = 80;
-int N_ptr = 80;
 //
 extern int MODEM_MODE_GSE;
 //---------------------------------------
@@ -88,14 +82,6 @@ int send_cmd(uint8_t addr, uint8_t Bytes[]) {
 
 int receive_status(CMX869B_StatusReg_TypeDef *st) {
     uint8_t buffer[] = {StatusReg_ADDR, 0xFF, 0xFF};
-    Status = spi_rx(3, buffer);
-    st->Bytes[0] = buffer[2];
-    st->Bytes[1] = buffer[1];
-    return 0;
-}
-
-int receive_gre(CMX869B_GRE_TypeDef *st) {
-    uint8_t buffer[] = {GRE_ADDR, 0xFF, 0xFF};
     Status = spi_rx(3, buffer);
     st->Bytes[0] = buffer[2];
     st->Bytes[1] = buffer[1];
@@ -207,8 +193,8 @@ void CMX869B_Init(void) {
     GRE.Bits.Pwr = 1;
     GRE.Bits.HighGain = 1;
     GRE.Bits.PatDet = 1;
-    //GRE.Bits.LB = 0;
-    GRE.Bits.LB = 1;
+    GRE.Bits.LB = 0;
+    //GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
     GRE.Bits.IrqMask = 0b000000;
@@ -216,10 +202,10 @@ void CMX869B_Init(void) {
     receive_status(&StatusReg);
 
     // モデム送受信の設定
-    set_bell();
+    //set_bell();
     //set_v22_ans();
     //set_v22_call();
-    //set_v22_loop();
+    set_v22_loop();
 
     //RxDataにゴミが入っているので除去して割込許可
     receive_data(&rx_data);
@@ -231,7 +217,7 @@ void CMX869B_Init(void) {
 }
 
 //-----------------------------------
-//タイマ割込で送信
+//周期タイマで送信
 //-----------------------------------
 void StartvTxTask(void *argument) {
     int count = 0;
@@ -254,7 +240,7 @@ void StartvTxTask(void *argument) {
 //割込ハンドラで受信
 //-----------------------------------
 void StartvRxTask(void *argument) {
-    uint8_t rx_data='A';
+    static uint8_t rx_data='A';
     for (;;) {
         //受信割込待機
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
@@ -262,7 +248,9 @@ void StartvRxTask(void *argument) {
         receive_status(&StatusReg);
         if (StatusReg.Bits.RxDataReady==1) {
             receive_data(&rx_data);
-            xprintf("%c",rx_data);
+            __disable_irq();
+            SEGGER_RTT_printf(0,"%c",rx_data);
+            __enable_irq();
         }
     }
 }

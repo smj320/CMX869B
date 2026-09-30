@@ -488,7 +488,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
   if (GPIO_Pin == MODEM_INT_Pin) {
     //HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    //vTaskNotifyGiveFromISR(vRxTaskHandle, &xHigherPriorityTaskWoken);
+    vTaskNotifyGiveFromISR(vRxTaskHandle, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     //HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
   }
@@ -568,7 +568,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if (htim->Instance == TIM2)
   {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    vTaskNotifyGiveFromISR(vRxTaskHandle, &xHigherPriorityTaskWoken);
+    vTaskNotifyGiveFromISR(vTxTaskHandle, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
   }
   /* USER CODE END Callback 1 */

@@ -248,9 +248,7 @@ void StartvRxTask(void *argument) {
         receive_status(&StatusReg);
         if (StatusReg.Bits.RxDataReady==1) {
             receive_data(&rx_data);
-            __disable_irq();
             SEGGER_RTT_printf(0,"%c",rx_data);
-            __enable_irq();
         }
     }
 }

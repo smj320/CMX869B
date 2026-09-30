@@ -27,6 +27,9 @@ Purpose : User configuration file for RTT.
 *
 **********************************************************************
 */
+#include "stm32f3xx.h"
+#define SEGGER_RTT_LOCK()     { __disable_irq(); }
+#define SEGGER_RTT_UNLOCK()   { __enable_irq(); }
 
 #endif
 /*************************** End of file ****************************/

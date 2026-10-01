@@ -18,19 +18,16 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "xprintf.h"
-#include "task.h"
 #include "CMX869B.h"
 #include "HK.h"
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
-typedef StaticTask_t osStaticThreadDef_t;
 /* USER CODE BEGIN PTD */
 
 /* USER CODE END PTD */
@@ -48,48 +45,10 @@ int MODEM_MODE_GSE = 0;
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
-SPI_HandleTypeDef hspi1;
-
 TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart2;
 
-/* Definitions for vHkTask */
-osThreadId_t vHkTaskHandle;
-uint32_t vHkTaskBuffer[ 128 ];
-osStaticThreadDef_t vHkTaskControlBlock;
-const osThreadAttr_t vHkTask_attributes = {
-  .name = "vHkTask",
-  .cb_mem = &vHkTaskControlBlock,
-  .cb_size = sizeof(vHkTaskControlBlock),
-  .stack_mem = &vHkTaskBuffer[0],
-  .stack_size = sizeof(vHkTaskBuffer),
-  .priority = (osPriority_t) osPriorityNormal,
-};
-/* Definitions for vRxTask */
-osThreadId_t vRxTaskHandle;
-uint32_t vRxTaskBuffer[ 128 ];
-osStaticThreadDef_t vRxTaskControlBlock;
-const osThreadAttr_t vRxTask_attributes = {
-  .name = "vRxTask",
-  .cb_mem = &vRxTaskControlBlock,
-  .cb_size = sizeof(vRxTaskControlBlock),
-  .stack_mem = &vRxTaskBuffer[0],
-  .stack_size = sizeof(vRxTaskBuffer),
-  .priority = (osPriority_t) osPriorityHigh,
-};
-/* Definitions for vTxTask */
-osThreadId_t vTxTaskHandle;
-uint32_t vTxTaskBuffer[ 128 ];
-osStaticThreadDef_t vTxTaskControlBlock;
-const osThreadAttr_t vTxTask_attributes = {
-  .name = "vTxTask",
-  .cb_mem = &vTxTaskControlBlock,
-  .cb_size = sizeof(vTxTaskControlBlock),
-  .stack_mem = &vTxTaskBuffer[0],
-  .stack_size = sizeof(vTxTaskBuffer),
-  .priority = (osPriority_t) osPriorityLow,
-};
 /* USER CODE BEGIN PV */
 /* USER CODE END PV */
 
@@ -97,13 +56,8 @@ const osThreadAttr_t vTxTask_attributes = {
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
-static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM2_Init(void);
-void StartvHkTask(void *argument);
-void StartvRxTask(void *argument);
-void StartvTxTask(void *argument);
-
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -145,7 +99,6 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_I2C1_Init();
-  MX_SPI1_Init();
   MX_USART2_UART_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
@@ -153,53 +106,11 @@ int main(void)
   if (GPIO_PIN_RESET == HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin)) {
     MODEM_MODE_GSE = 1;
   }
-  // モデム初期化
+  // モデム初期化とxprintの実働関数の登録
   CMX869B_Init();
   void uart_putc(unsigned char c);
   xdev_out(uart_putc);
   /* USER CODE END 2 */
-
-  /* Init scheduler */
-  osKernelInitialize();
-
-  /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
-
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
-
-  /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
-
-  /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
-
-  /* Create the thread(s) */
-  /* creation of vHkTask */
-  vHkTaskHandle = osThreadNew(StartvHkTask, NULL, &vHkTask_attributes);
-
-  /* creation of vRxTask */
-  vRxTaskHandle = osThreadNew(StartvRxTask, NULL, &vRxTask_attributes);
-
-  /* creation of vTxTask */
-  vTxTaskHandle = osThreadNew(StartvTxTask, NULL, &vTxTask_attributes);
-
-  /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
-  /* USER CODE END RTOS_THREADS */
-
-  /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
-  /* USER CODE END RTOS_EVENTS */
-
-  /* Start scheduler */
-  osKernelStart();
-
-  /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -305,46 +216,6 @@ static void MX_I2C1_Init(void)
 }
 
 /**
-  * @brief SPI1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_SPI1_Init(void)
-{
-
-  /* USER CODE BEGIN SPI1_Init 0 */
-
-  /* USER CODE END SPI1_Init 0 */
-
-  /* USER CODE BEGIN SPI1_Init 1 */
-
-  /* USER CODE END SPI1_Init 1 */
-  /* SPI1 parameter configuration*/
-  hspi1.Instance = SPI1;
-  hspi1.Init.Mode = SPI_MODE_MASTER;
-  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi1.Init.CRCPolynomial = 7;
-  hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
-  if (HAL_SPI_Init(&hspi1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN SPI1_Init 2 */
-
-  /* USER CODE END SPI1_Init 2 */
-
-}
-
-/**
   * @brief TIM2 Initialization Function
   * @param None
   * @retval None
@@ -405,7 +276,7 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 9600;
+  huart2.Init.BaudRate = 115200;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
@@ -441,111 +312,58 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(C_CLK_GPIO_Port, C_CLK_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : CPU_MON_Pin */
-  GPIO_InitStruct.Pin = CPU_MON_Pin;
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, CPU_MON_Pin|C_MOSI_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : C_CS_Pin */
+  GPIO_InitStruct.Pin = C_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(CPU_MON_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(C_CS_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : MODEM_CS_Pin */
-  GPIO_InitStruct.Pin = MODEM_CS_Pin;
+  /*Configure GPIO pin : C_CLK_Pin */
+  GPIO_InitStruct.Pin = C_CLK_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(MODEM_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(C_CLK_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : MODEM_INT_Pin */
-  GPIO_InitStruct.Pin = MODEM_INT_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(MODEM_INT_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : MODEM_MODE_Pin */
-  GPIO_InitStruct.Pin = MODEM_MODE_Pin;
+  /*Configure GPIO pins : C_MISO_Pin MODEM_MODE_Pin */
+  GPIO_InitStruct.Pin = C_MISO_Pin|MODEM_MODE_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(MODEM_MODE_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
-  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+  /*Configure GPIO pins : CPU_MON_Pin C_MOSI_Pin */
+  GPIO_InitStruct.Pin = CPU_MON_Pin|C_MOSI_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
-// ------------------------------------------
-// モデム割込検知
-// ------------------------------------------
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-  if (GPIO_Pin == MODEM_INT_Pin) {
-    //HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    vTaskNotifyGiveFromISR(vRxTaskHandle, &xHigherPriorityTaskWoken);
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    //HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+//************************
+// xprintf用
+//************************
+void uart_putc(unsigned char c) {
+  // 送信データレジスタが空（TXE: Transmit Data Register Empty）になるのを待つ
+  while (!(USART2->ISR & USART_ISR_TXE)) {
+    // 必要に応じて無限ループ防止用のカウンターなどを追加
   }
+  // 送信データレジスタに直接書き込む
+  USART2->TDR = c;
 }
-
 /* USER CODE END 4 */
-
-/* USER CODE BEGIN Header_StartvHkTask */
-/**
-  * @brief  Function implementing the vHkTask thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_StartvHkTask */
-__weak void StartvHkTask(void *argument)
-{
-  /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  HKTaskLoop();
-  /* USER CODE END 5 */
-}
-
-/* USER CODE BEGIN Header_StartvRxTask */
-/**
-* @brief Function implementing the vRxTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartvRxTask */
-__weak void StartvRxTask(void *argument)
-{
-  /* USER CODE BEGIN StartvRxTask */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartvRxTask */
-}
-
-/* USER CODE BEGIN Header_StartvTxTask */
-/**
-* @brief Function implementing the vTxTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartvTxTask */
-__weak void StartvTxTask(void *argument)
-{
-  /* USER CODE BEGIN StartvTxTask */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartvTxTask */
-}
 
 /**
   * @brief  Period elapsed callback in non blocking mode
@@ -567,9 +385,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 1 */
   if (htim->Instance == TIM2)
   {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    vTaskNotifyGiveFromISR(vTxTaskHandle, &xHigherPriorityTaskWoken);
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
   }
   /* USER CODE END Callback 1 */
 }

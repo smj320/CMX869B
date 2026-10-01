@@ -9,7 +9,6 @@
  * Xtal 6.144MHz, 47pF
  */
 #include <stdint.h>
-#include "cmsis_os.h"
 
 //-------------------------------------
 // レジスタ
@@ -98,16 +97,17 @@ typedef union {
     } __attribute__((packed)) Bits;
 } CMX869B_StatusReg_TypeDef;
 
-#define QamReg_ADDR 0xEA
-#define QamMaxBR_14400 0x111
-#define QamMaxBR_12000 0x110
-#define QamMaxBR_9600 0x101
-#define QamCall 0x010
-#define QamAnswer 0x011
+#define QamCmdReg_ADDR 0xEA
+#define QamMaxBR_14400 0b111
+#define QamMaxBR_12000 0b110
+#define QamMaxBR_9600 0b101
+#define QamCall 0b010
+#define QamAnswer 0b011
+#define QamAZeros 0b0000000000000
 typedef union {
     uint8_t  Bytes[2];
     struct {
-        uint16_t protocol : 3;
+        uint16_t br : 3;
         uint16_t command : 3; //Calling/Answer
         uint16_t zeros : 13;
     }  __attribute__((packed)) Bits;
@@ -128,14 +128,20 @@ typedef union {
 void CMX869B_Init(void);
 void CMX869B_RtosInit(void);
 void CMX869B_EnableIrq(uint8_t mask);
-osStatus_t CMX869B_WaitIrq(uint32_t timeout);
 
-int receive_status(CMX869B_StatusReg_TypeDef *st);
 int receive_gre(CMX869B_GRE_TypeDef *st);
-int send_data(uint8_t data);
+int receive_status(CMX869B_StatusReg_TypeDef *st);
+int receive_qam_status(CMX869B_QamStatusReg_TypeDef *st);
 int receive_data(uint8_t *st);
-void tx_int_enable(void);
-void tx_int_disable(void);
+int send_data(uint8_t data);
+int send_cmd(uint8_t addr, uint8_t Bytes[]);
 void CMX869BbTaskLoop(void);
+
+void set_bell(void);
+void set_v22_call(void);
+void set_v22_answer(void);
+void set_v22_loop(void);
+void set_qam_call(void);
+void set_qam_answer(void);
 
 #endif //CMX869B_CMX869B_H

@@ -22,10 +22,16 @@ CMX869B_QamStatusReg_TypeDef QamStatusReg = {0};
 extern int MODEM_MODE_GSE;
 
 void cbux_global_reset() {
-    //HAL_GPIO_WritePin(MODEM_CS_GPIO_Port, MODEM_CS_Pin, GPIO_PIN_RESET);
-    for (int i = 0; i < 2; i++) {
-
+    uint8_t address=0x01;;
+    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
+    for (int i = 0; i < 8; i++) {
+        uint8_t bit = (address>>(7-i))&0x01;
+        HAL_GPIO_WritePin(C_MOSI_GPIO_Port, C_MOSI_Pin, bit);
+        HAL_GPIO_WritePin(C_CLK_GPIO_Port, C_CLK_Pin, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(C_CLK_GPIO_Port, C_CLK_Pin, GPIO_PIN_RESET);
     }
+    HAL_GPIO_WritePin(C_MOSI_GPIO_Port, C_MOSI_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
 }
 
 
@@ -82,19 +88,9 @@ void CMX869B_Init(void) {
     uint8_t rx_data;
     uint8_t dummy[] = {0, 0};
 
-    for (int i = 0; i < 2; i++) {
-    }
+    cbux_global_reset();
 
-    // コマンドを書き込む（受信は無視）
-    volatile int nc, tic;
-    for (nc=0; nc<100000; nc++) {
-        while (!(SPI1->SR & SPI_SR_TXE)){};
-        HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
-        SPI1->DR = 0x44;
-        while (!(SPI1->SR & SPI_SR_TXE)){};
-        HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
-        nn:;
-    }
+
 
     // グローバルリセット
     send_cmd(General_Reset, dummy);

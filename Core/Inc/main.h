@@ -63,7 +63,7 @@ void Error_Handler(void);
 #define C_CS_GPIO_Port GPIOF
 #define VCP_TX_Pin GPIO_PIN_2
 #define VCP_TX_GPIO_Port GPIOA
-#define C_CLK_Pin GPIO_PIN_9
+#define C_CLK_Pin GPIO_PIN_8
 #define C_CLK_GPIO_Port GPIOA
 #define C_MISO_Pin GPIO_PIN_11
 #define C_MISO_GPIO_Port GPIOA

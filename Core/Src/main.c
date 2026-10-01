@@ -115,11 +115,10 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-    while (1) {
+    HKLoop();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    }
   /* USER CODE END 3 */
 }
 
@@ -348,6 +347,16 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : C_INT_Pin */
+  GPIO_InitStruct.Pin = C_INT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(C_INT_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
+
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   /* USER CODE END MX_GPIO_Init_2 */
 }
@@ -363,6 +372,17 @@ void uart_putc(unsigned char c) {
   }
   // 送信データレジスタに直接書き込む
   USART2->TDR = c;
+}
+//************************
+// 外部割り込み対策
+//************************
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == C_INT_Pin) // 設定したピン番号に合わせて変更
+  {
+    // 割り込み発生時の処理（フラグ操作やLEDのトグルなど）
+    EXEC_C_INT();
+  }
 }
 /* USER CODE END 4 */
 

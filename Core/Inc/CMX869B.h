@@ -133,4 +133,9 @@ void set_v22_loop(void);
 void set_qam_call(void);
 void set_qam_answer(void);
 
+void EXEC_C_INT(void);
+
+#define N_TX_BUFFER 80
+#define N_RX_BUFFER 80
+
 #endif //CMX869B_CMX869B_H

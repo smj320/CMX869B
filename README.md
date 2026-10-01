@@ -2,6 +2,24 @@
 
 ## 気付き事項
 
+### 割込設定
+ピンの割込を有効にすると、
+__weak void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+というのがstm32xxx_hal_gpio.hの中に生成される。これをオーバーライドする。
+
+ピンをディスパッチする必要があるので、main.cにかくのがよいか。
+
+```aiignore
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == GPIO_PIN_0) // 設定したピン番号に合わせて変更
+    {
+        // 割り込み発生時の処理（フラグ操作やLEDのトグルなど）
+    }
+}
+```
+
+
 ### ループ待機
 SPIのクロックは4MHzになっている。10クロック分で400kHZ,2.5usec
 forループでビットを落としたあと上がるまでの時間は2usec

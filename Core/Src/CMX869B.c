@@ -8,6 +8,10 @@
 #include "main.h"
 #include "xprintf.h"
 
+uint8_t TX_buffer[N_TX_BUFFER];
+uint8_t RX_buffer[N_RX_BUFFER];
+int TX_ptr = 0;
+int RX_ptr = 0;
 
 extern UART_HandleTypeDef huart2;
 extern TIM_HandleTypeDef htim2;
@@ -102,25 +106,29 @@ void CMX869B_Init(void) {
     //set_qam_call();
 
     //RxDataにゴミが入っているので除去
-    /*
+    GRE.Bits.IrqMask = 0b001001;
+    __disable_irq();
+    cbus_write(GRE_ADDR, GRE.Word);
     cbus_read(StatusReg_ADDR, &StatusReg.Word);
     cbus_read(RxData_ADDR, &rx_data);
     cbus_read(StatusReg_ADDR, &StatusReg.Word);
-    cbus_read(RxData_ADDR, &rx_data);
-    cbus_read(StatusReg_ADDR, &StatusReg.Word);
+    __enable_irq();
     HAL_Delay(1);
-    */
+}
 
-    //ループでステータスを読んでみる
-
-    for (int i = 0; i < 100000; i++) {
-        if (i%10000 == 0) {
-            xprintf("Tring...\r\n");
-        }
-        cbus_read(StatusReg_ADDR, &StatusReg.Word);
-        if (StatusReg.Bits.RxDataReady == 1) {
-            xprintf("RxDataReady: %d\r\n", StatusReg.Bits.RxDataReady);
-            cbus_read(RxData_ADDR, &rx_data);
+void EXEC_C_INT(void)
+{
+    uint16_t rx_data;
+    cbus_read(StatusReg_ADDR, &StatusReg.Word);
+    if (StatusReg.Bits.RxDataReady == 1) {
+        xprintf("RxDataReady: %d\r\n", StatusReg.Bits.RxDataReady);
+        cbus_read(RxData_ADDR, &rx_data);
+    }
+    if (StatusReg.Bits.TxDataReady == 1) {
+        xprintf("TxDataReady: %d\r\n", StatusReg.Bits.TxDataReady);
+        if (TX_ptr < N_TX_BUFFER) {
+            cbus_write(TxData_ADDR, 0x05);
+            TX_ptr++;
         }
     }
 }

@@ -4,22 +4,23 @@
 #include "string.h"
 #include "main.h"
 #include "CMX869b.h"
-
-extern UART_HandleTypeDef huart2;
+#include "HK.h"
+#include "xprintf.h"
 //
-static CMX869B_StatusReg_TypeDef StatusReg = {0};
-//
-extern int Ptr;
+extern uint8_t TX_buffer[];
+extern uint8_t RX_buffer[];
+extern int TX_ptr;
+extern int RX_ptr;
 //
 //********************************************
 // HK生成とか
 //********************************************
-void StartvHkTask(void *argument) {
-    const uint32_t period = 1000; // 1秒（1000ms）周期
-
+void HKLoop() {
+    int i=0;
     for (;;) {
-        //ハートビート確認
-        //HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
-        //ステータス確認
+        xprintf("HKLoop %08d\r\n", i++);
+        TX_ptr = 1;
+        cbus_write(TxData_ADDR, 0x01);
+        HAL_Delay(1000);
     }
 }

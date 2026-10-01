@@ -5,6 +5,6 @@
 #ifndef CMX869B_HK_H
 #define CMX869B_HK_H
 
-void HKTaskLoop();
+void HKLoop();
 
 #endif //CMX869B_HK_H

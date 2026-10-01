@@ -77,6 +77,9 @@ void Error_Handler(void);
 #define VCP_RX_GPIO_Port GPIOA
 #define CPU_MON_Pin GPIO_PIN_3
 #define CPU_MON_GPIO_Port GPIOB
+#define C_INT_Pin GPIO_PIN_4
+#define C_INT_GPIO_Port GPIOB
+#define C_INT_EXTI_IRQn EXTI4_IRQn
 #define C_MOSI_Pin GPIO_PIN_5
 #define C_MOSI_GPIO_Port GPIOB
 

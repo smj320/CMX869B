@@ -1,15 +1,12 @@
 //
 // Created by kikuchi on 2026/01/12.
 //
-
 #ifndef CMX869B_CMX869B_H
 #define CMX869B_CMX869B_H
-
 /*
  * Xtal 6.144MHz, 47pF
  */
 #include <stdint.h>
-
 //-------------------------------------
 // レジスタ
 // ビットフィールドは上がb0で下がb15

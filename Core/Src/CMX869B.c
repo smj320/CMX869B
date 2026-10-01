@@ -53,7 +53,7 @@ void cbus_write(uint8_t adr, uint16_t data) {
     int n_bits = adr == TxData_ADDR ? 8 : 16;
     HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
     cbus_raw_write(adr, 8);
-    if (adr!=General_Reset_ADDR) {
+    if (adr != General_Reset_ADDR) {
         cbus_raw_write(data, n_bits);
     }
     HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
@@ -84,8 +84,8 @@ void CMX869B_Init(void) {
     GRE.Bits.Pwr = 1;
     GRE.Bits.HighGain = 1;
     GRE.Bits.PatDet = 1;
-    GRE.Bits.LB = 0;
-    //GRE.Bits.LB = 1;
+    //GRE.Bits.LB = 0;
+    GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
     GRE.Bits.IrqMask = 0b000000;
@@ -102,8 +102,25 @@ void CMX869B_Init(void) {
     //set_qam_call();
 
     //RxDataにゴミが入っているので除去
-    cbus_read(RxData_ADDR,  &rx_data);
+    /*
     cbus_read(StatusReg_ADDR, &StatusReg.Word);
-    cbus_read(StatusReg_ADDR, &rx_data);
+    cbus_read(RxData_ADDR, &rx_data);
+    cbus_read(StatusReg_ADDR, &StatusReg.Word);
+    cbus_read(RxData_ADDR, &rx_data);
+    cbus_read(StatusReg_ADDR, &StatusReg.Word);
     HAL_Delay(1);
+    */
+
+    //ループでステータスを読んでみる
+
+    for (int i = 0; i < 100000; i++) {
+        if (i%10000 == 0) {
+            xprintf("Tring...\r\n");
+        }
+        cbus_read(StatusReg_ADDR, &StatusReg.Word);
+        if (StatusReg.Bits.RxDataReady == 1) {
+            xprintf("RxDataReady: %d\r\n", StatusReg.Bits.RxDataReady);
+            cbus_read(RxData_ADDR, &rx_data);
+        }
+    }
 }

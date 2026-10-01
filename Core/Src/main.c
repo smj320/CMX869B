@@ -106,10 +106,11 @@ int main(void)
   if (GPIO_PIN_RESET == HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin)) {
     MODEM_MODE_GSE = 1;
   }
-  // モデム初期化とxprintの実働関数の登録
-  CMX869B_Init();
+  // xprintの実働関数の登録
   void uart_putc(unsigned char c);
   xdev_out(uart_putc);
+  // モデム初期化
+  CMX869B_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */

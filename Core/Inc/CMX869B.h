@@ -15,11 +15,11 @@
 // ビットフィールドは上がb0で下がb15
 // 送信するときはByte[1],Byte[0]の順
 //-------------------------------------
-#define General_Reset 0x01
+#define General_Reset_ADDR 0x01
 
 #define GRE_ADDR 0xE0
 typedef union {
-    uint8_t  Bytes[2];
+    uint16_t  Word;
     struct {
         uint16_t IrqMask : 6; //b0
         uint16_t IrqEna : 1;
@@ -41,7 +41,7 @@ typedef union {
 #define TxReg_Mode_V22_CALL 0b1010
 #define TxReg_Mode_BELL 0b0011
 typedef union {
-    uint8_t  Bytes[2];
+    uint16_t  Word;
     struct {
         uint16_t DataBits : 3; //b0
         uint16_t StartStop : 2;
@@ -59,7 +59,7 @@ typedef union {
 #define RxReg_Mode_BELL 0b0011
 
 typedef union {
-    uint8_t  Bytes[2];
+    uint16_t  Word;
     struct {
         uint16_t BitsParity : 3; //b0
         uint16_t StartStop_Synch : 3;
@@ -74,7 +74,7 @@ typedef union {
 
 #define StatusReg_ADDR 0xE6
 typedef union {
-    uint8_t  Bytes[2];
+    uint16_t  Word;
     struct {
         uint16_t FSKDemodulatorOutput : 1; // b0
         uint16_t Char2Mode : 1;            // b1
@@ -105,7 +105,7 @@ typedef union {
 #define QamAnswer 0b011
 #define QamAZeros 0b0000000000000
 typedef union {
-    uint8_t  Bytes[2];
+    uint16_t  Word;
     struct {
         uint16_t br : 3;
         uint16_t command : 3; //Calling/Answer
@@ -116,7 +116,7 @@ typedef union {
 
 #define QamStatusReg_ADDR 0xEB
 typedef union {
-    uint8_t  Bytes[2];
+    uint16_t  Word;
     struct {
         uint16_t Mode : 4; //b0
         uint16_t SNR : 3;
@@ -125,17 +125,9 @@ typedef union {
     } __attribute__((packed)) Bits;
 } CMX869B_QamStatusReg_TypeDef;
 
-void CMX869B_Init(void);
-void CMX869B_RtosInit(void);
-void CMX869B_EnableIrq(uint8_t mask);
-
-int receive_gre(CMX869B_GRE_TypeDef *st);
-int receive_status(CMX869B_StatusReg_TypeDef *st);
-int receive_qam_status(CMX869B_QamStatusReg_TypeDef *st);
-int receive_data(uint8_t *st);
-int send_data(uint8_t data);
-int send_cmd(uint8_t addr, uint8_t Bytes[]);
-void CMX869BbTaskLoop(void);
+void CMX869B_Init();
+void cbus_write(uint8_t addr, uint16_t data);
+void cbus_read(uint8_t addr, uint16_t *data);
 
 void set_bell(void);
 void set_v22_call(void);

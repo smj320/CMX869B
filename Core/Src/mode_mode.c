@@ -22,12 +22,12 @@ void set_bell(void) {
     TxReg.Bits.TxMode = TxReg_Mode_BELL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    send_cmd(TxReg_ADDR, TxReg.Bytes);
+    //cbus_write(TxReg_ADDR, TxReg.Bytes);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_BELL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    send_cmd(RxReg_ADDR, RxReg.Bytes);
+    //cbus_write(RxReg_ADDR, RxReg.Bytes);
 }
 
 // 2400 bps 全二重
@@ -37,12 +37,12 @@ void set_v22_call(void) {
     TxReg.Bits.TxMode = TxReg_Mode_V22_CALL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    send_cmd(TxReg_ADDR, TxReg.Bytes);
+    //cbus_write(TxReg_ADDR, TxReg.Bytes);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_V22_CALL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    send_cmd(RxReg_ADDR, RxReg.Bytes);
+    //cbus_write(RxReg_ADDR, RxReg.Bytes);
 }
 
 void set_v22_ans(void) {
@@ -50,12 +50,12 @@ void set_v22_ans(void) {
     TxReg.Bits.TxMode = TxReg_Mode_V22_ANS;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    send_cmd(TxReg_ADDR, TxReg.Bytes);
+    //cbus_write(TxReg_ADDR, TxReg.Bytes);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_V22_ANS;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    send_cmd(RxReg_ADDR, RxReg.Bytes);
+    //cbus_write(RxReg_ADDR, RxReg.Bytes);
 }
 
 void set_v22_loop(void) {
@@ -63,12 +63,12 @@ void set_v22_loop(void) {
     TxReg.Bits.TxMode = TxReg_Mode_V22_ANS;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    send_cmd(TxReg_ADDR, TxReg.Bytes);
+    //cbus_write(TxReg_ADDR, TxReg.Bytes);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_V22_CALL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    send_cmd(RxReg_ADDR, RxReg.Bytes);
+    //cbus_write(RxReg_ADDR, RxReg.Bytes);
 }
 
 // Auto modem
@@ -77,21 +77,23 @@ void set_qam_answer(void) {
     TxReg.Bits.TxMode = TxReg_Mode_QAM_AUTO;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    send_cmd(TxReg_ADDR, TxReg.Bytes);
+    //cbus_write(TxReg_ADDR, TxReg.Bytes);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    send_cmd(RxReg_ADDR, RxReg.Bytes);
+    //cbus_write(RxReg_ADDR, RxReg.Bytes);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
     QamReg.Bits.command = QamAnswer;
     QamReg.Bits.zeros = QamAZeros;
-    send_cmd(QamCmdReg_ADDR, QamReg.Bytes);
+    //cbus_write(QamCmdReg_ADDR, QamReg.Bytes);
+    /*
     for (int i = 0; i < 200; i++) {
-        receive_qam_status(&QamStatusReg);
-        xprintf("%02x, %02x\r\n",QamStatusReg.Bytes[0],QamStatusReg.Bytes[1]);
+        //receive_qam_status(&QamStatusReg);
+        //xprintf("%02x, %02x\r\n",QamStatusReg.Bytes[0],QamStatusReg.Bytes[1]);
     };
+    */
 
 }
 
@@ -100,15 +102,15 @@ void set_qam_call(void) {
     TxReg.Bits.TxMode = TxReg_Mode_QAM_AUTO;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    send_cmd(TxReg_ADDR, TxReg.Bytes);
+    //cbus_write(TxReg_ADDR, TxReg.Bytes);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    send_cmd(RxReg_ADDR, RxReg.Bytes);
+    //cbus_write(RxReg_ADDR, RxReg.Bytes);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
     QamReg.Bits.command = QamCall;
     QamReg.Bits.zeros = QamAZeros;
-    send_cmd(QamCmdReg_ADDR, QamReg.Bytes);
+    //cbus_write(QamCmdReg_ADDR, QamReg.Bytes);
 }

@@ -151,11 +151,11 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV4;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
     Error_Handler();
   }
@@ -236,9 +236,9 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 7999;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 9;
+  htim2.Init.Period = 999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
   {
     Error_Handler();
@@ -334,11 +334,17 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(C_CLK_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : C_MISO_Pin MODEM_MODE_Pin */
-  GPIO_InitStruct.Pin = C_MISO_Pin|MODEM_MODE_Pin;
+  /*Configure GPIO pin : C_MISO_Pin */
+  GPIO_InitStruct.Pin = C_MISO_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(C_MISO_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : MODEM_MODE_Pin */
+  GPIO_InitStruct.Pin = MODEM_MODE_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  HAL_GPIO_Init(MODEM_MODE_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : CPU_MON_Pin C_MOSI_Pin */
   GPIO_InitStruct.Pin = CPU_MON_Pin|C_MOSI_Pin;
@@ -381,7 +387,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   if (GPIO_Pin == C_INT_Pin) // 設定したピン番号に合わせて変更
   {
     // 割り込み発生時の処理（フラグ操作やLEDのトグルなど）
+    HAL_GPIO_WritePin(CPU_MON_GPIO_Port,CPU_MON_Pin,GPIO_PIN_SET);
     EXEC_C_INT();
+    HAL_GPIO_WritePin(CPU_MON_GPIO_Port,CPU_MON_Pin,GPIO_PIN_RESET);
   }
 }
 /* USER CODE END 4 */
@@ -406,6 +414,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 1 */
   if (htim->Instance == TIM2)
   {
+    //HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
   }
   /* USER CODE END Callback 1 */
 }

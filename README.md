@@ -2,6 +2,25 @@
 
 ## 気付き事項
 
+### 割込の変換
+対応するレジスタが「0から1に変化したとき」マスクが空いていれば割込線を落とす。
+割込線自体は、StatusRegisterを読むとHに戻る。
+
+TxDataReady=1 →TxDataを書いてよければ１になる。TxDataAddrに書くと０になる。
+TxDataUnderflow=1 TxDataを書き込まないと1になる。TxDataAddrに書くと０になる。
+
+### ステータス判定
+#### TXの場合
+TxDataReadyは次のTxDataを受け付けることができるフラグで、一つ送信した後
+10msec以内にOnになる。 一方TxDataUnderflowフラグは変調信号を送り終わった
+タイミングはで上がる。
+なので連続送信を行う場合、次の送信タイミングはTxDataUnderflow=1となる。
+ただし送信にあたってはTxDataReady=1を確認する必要がある。
+
+#### RXの場合
+ループバックにしたとき、変調信号が出きって信号の1.5倍くらいのところで
+TxDataOverflow=1が立つ。このタイミングで読むべき。
+
 ### 割込設定
 ピンの割込を有効にすると、
 __weak void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)

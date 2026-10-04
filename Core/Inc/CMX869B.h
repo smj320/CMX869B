@@ -125,6 +125,10 @@ typedef union {
 void CMX869B_Init();
 void cbus_write(uint8_t addr, uint16_t data);
 void cbus_read(uint8_t addr, uint16_t *data);
+#define CBUS_WRITE(x) cbus_write(TxData_ADDR, x);
+#define CBUS_READ(x) cbus_read(RxData_ADDR, x);
+#define CBUS_STATUS(x) cbus_read(StatusReg_ADDR, x);
+#define CBUS_QAM(x) cbus_read(QamStatusReg_ADDR, x);
 
 void set_bell(void);
 void set_v22_call(void);
@@ -135,7 +139,7 @@ void set_qam_answer(void);
 
 void EXEC_C_INT(void);
 
-#define N_TX_BUFFER 80
-#define N_RX_BUFFER 80
+#define N_TX_BUFFER 40
+#define N_RX_BUFFER 40
 
 #endif //CMX869B_CMX869B_H

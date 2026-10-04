@@ -8,6 +8,7 @@
 #include "main.h"
 #include "xprintf.h"
 
+uint8_t Is_1stInt=1;
 uint8_t TX_buffer[N_TX_BUFFER];
 uint8_t RX_buffer[N_RX_BUFFER];
 int TX_ptr = 0;
@@ -77,7 +78,7 @@ void CMX869B_Init(void) {
     cbus_write(General_Reset_ADDR, 0);
 
     // ステータス確認
-    cbus_read(StatusReg_ADDR, &StatusReg.Word);
+    CBUS_STATUS(&StatusReg.Word);
 
     // リセットビットでリセット
     GRE.Bits.Rst = 1;
@@ -94,7 +95,7 @@ void CMX869B_Init(void) {
     GRE.Bits.IrqEna = 1;
     GRE.Bits.IrqMask = 0b000000;
     cbus_write(GRE_ADDR, GRE.Word);
-    cbus_read(StatusReg_ADDR, &StatusReg.Word);
+    CBUS_STATUS(&StatusReg.Word);
     HAL_Delay(1);
 
     // モデム送受信の設定
@@ -105,30 +106,21 @@ void CMX869B_Init(void) {
     //set_qam_answer();
     //set_qam_call();
 
-    //RxDataにゴミが入っているので除去
-    GRE.Bits.IrqMask = 0b001001;
-    __disable_irq();
+    //割込を有効にすると、ステータスが1111で割込が出る。
+    //TXでもRXでも初回は必ず発生。
+    //RXDを読んでおけば発生しないかもだがTXDはどうしようもない。
+    GRE.Bits.IrqMask = 0b000001;
     cbus_write(GRE_ADDR, GRE.Word);
-    cbus_read(StatusReg_ADDR, &StatusReg.Word);
-    cbus_read(RxData_ADDR, &rx_data);
-    cbus_read(StatusReg_ADDR, &StatusReg.Word);
-    __enable_irq();
     HAL_Delay(1);
 }
 
-void EXEC_C_INT(void)
-{
-    uint16_t rx_data;
-    cbus_read(StatusReg_ADDR, &StatusReg.Word);
+
+void EXEC_C_INT(void) {
+    static uint16_t rx_data = 0;
+    //割込線を落とす
+    CBUS_STATUS(&StatusReg.Word);
     if (StatusReg.Bits.RxDataReady == 1) {
-        xprintf("RxDataReady: %d\r\n", StatusReg.Bits.RxDataReady);
-        cbus_read(RxData_ADDR, &rx_data);
-    }
-    if (StatusReg.Bits.TxDataReady == 1) {
-        xprintf("TxDataReady: %d\r\n", StatusReg.Bits.TxDataReady);
-        if (TX_ptr < N_TX_BUFFER) {
-            cbus_write(TxData_ADDR, 0x05);
-            TX_ptr++;
-        }
-    }
+        CBUS_READ(&rx_data);
+        xprintf("%d", rx_data);
+    };
 }

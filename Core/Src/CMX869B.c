@@ -121,6 +121,7 @@ void EXEC_C_INT(void) {
     static uint16_t rx_data = 0;
     //ステータス確認
     CBUS_STATUS(&StatusReg.Word);
+    //受信データが来ていれば
     if (StatusReg.Bits.RxDataReady == 1) {
         CBUS_READ(&rx_data);
         CBUS_STATUS(&StatusReg.Word);

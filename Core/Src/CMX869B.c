@@ -106,21 +106,24 @@ void CMX869B_Init(void) {
     //set_qam_answer();
     //set_qam_call();
 
-    //割込を有効にすると、ステータスが1111で割込が出る。
-    //TXでもRXでも初回は必ず発生。
-    //RXDを読んでおけば発生しないかもだがTXDはどうしようもない。
+    //受信割込許可
     GRE.Bits.IrqMask = 0b000001;
     cbus_write(GRE_ADDR, GRE.Word);
-    HAL_Delay(1);
-}
 
+    //送信タイマ周期の設定
+    //__HAL_TIM_SET_AUTORELOAD(&htim2, 99);
+
+    //送信タイマ動作スタート
+    //HAL_TIM_Base_Start_IT(&htim2);
+}
 
 void EXEC_C_INT(void) {
     static uint16_t rx_data = 0;
-    //割込線を落とす
+    //ステータス確認
     CBUS_STATUS(&StatusReg.Word);
     if (StatusReg.Bits.RxDataReady == 1) {
         CBUS_READ(&rx_data);
+        CBUS_STATUS(&StatusReg.Word);
         xprintf("%d", rx_data);
     };
 }

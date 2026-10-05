@@ -78,11 +78,11 @@ void CMX869B_Init(void) {
     cbus_write(General_Reset_ADDR, 0);
 
     // ステータス確認
-    CBUS_STATUS(&StatusReg.Word);
+    CBUS_ST_READ(&StatusReg.Word);
 
     // リセットビットでリセット
     GRE.Bits.Rst = 1;
-    cbus_write(GRE_ADDR, GRE.Word);
+    CBUS_GRE_WRITE(GRE.Word);
     HAL_Delay(1);
 
     //send_cmdで、うまくいくと22pinが発振する
@@ -94,24 +94,34 @@ void CMX869B_Init(void) {
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
     GRE.Bits.IrqMask = 0b000000;
-    cbus_write(GRE_ADDR, GRE.Word);
-    CBUS_STATUS(&StatusReg.Word);
+    CBUS_GRE_WRITE(GRE.Word);
+    CBUS_ST_READ(&StatusReg.Word);
     HAL_Delay(1);
 
     // モデム送受信の設定
-    set_bell();
+    //set_bell();
     //set_v22_ans();
     //set_v22_call();
     //set_v22_loop();
-    //set_qam_answer();
+    set_qam_answer();
     //set_qam_call();
+
+    //ネゴシエーションの結果取得と送信タイマの設定
+    //失敗した場合はv22にフォールバック
+    HAL_Delay(10000);
+    CBUS_QAM_ST_READ(&QamStatusReg.Word);
+    int bps = get_qam_bps(QamStatusReg.Bits.Mode);
+    if (bps == 0) {
+        bps = 1200;
+        set_v22_loop();
+        __HAL_TIM_SET_AUTORELOAD(&htim2, bps);
+    }else {
+        __HAL_TIM_SET_AUTORELOAD(&htim2, bps);
+    }
 
     //受信割込許可
     GRE.Bits.IrqMask = 0b000001;
-    cbus_write(GRE_ADDR, GRE.Word);
-
-    //送信タイマ周期の設定
-    //__HAL_TIM_SET_AUTORELOAD(&htim2, 99);
+    CBUS_GRE_WRITE(GRE.Word);
 
     //送信タイマ動作スタート
     //HAL_TIM_Base_Start_IT(&htim2);
@@ -120,11 +130,11 @@ void CMX869B_Init(void) {
 void EXEC_C_INT(void) {
     static uint16_t rx_data = 0;
     //ステータス確認
-    CBUS_STATUS(&StatusReg.Word);
+    CBUS_ST_READ(&StatusReg.Word);
     //受信データが来ていれば
     if (StatusReg.Bits.RxDataReady == 1) {
-        CBUS_READ(&rx_data);
-        CBUS_STATUS(&StatusReg.Word);
+        CBUS_DATA_READ(&rx_data);
+        CBUS_ST_READ(&StatusReg.Word);
         xprintf("%d", rx_data);
     };
 }

@@ -125,10 +125,11 @@ typedef union {
 void CMX869B_Init();
 void cbus_write(uint8_t addr, uint16_t data);
 void cbus_read(uint8_t addr, uint16_t *data);
-#define CBUS_WRITE(x) cbus_write(TxData_ADDR, x);
-#define CBUS_READ(x) cbus_read(RxData_ADDR, x);
-#define CBUS_STATUS(x) cbus_read(StatusReg_ADDR, x);
-#define CBUS_QAM(x) cbus_read(QamStatusReg_ADDR, x);
+#define CBUS_GRE_WRITE(x) cbus_write(GRE_ADDR, x);
+#define CBUS_DATA_WRITE(x) cbus_write(TxData_ADDR, x);
+#define CBUS_DATA_READ(x) cbus_read(RxData_ADDR, x);
+#define CBUS_ST_READ(x) cbus_read(StatusReg_ADDR, x);
+#define CBUS_QAM_ST_READ(x) cbus_read(QamStatusReg_ADDR, x);
 
 void set_bell(void);
 void set_v22_call(void);
@@ -136,6 +137,7 @@ void set_v22_answer(void);
 void set_v22_loop(void);
 void set_qam_call(void);
 void set_qam_answer(void);
+int  get_qam_bps(uint16_t mode);
 
 void EXEC_C_INT(void);
 

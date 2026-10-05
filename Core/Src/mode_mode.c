@@ -77,24 +77,23 @@ void set_qam_answer(void) {
     TxReg.Bits.TxMode = TxReg_Mode_QAM_AUTO;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    //cbus_write(TxReg_ADDR, TxReg.Word);
+    cbus_write(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    //cbus_write(RxReg_ADDR, RxReg.Word);
+    cbus_write(RxReg_ADDR, RxReg.Word);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
     QamReg.Bits.command = QamAnswer;
     QamReg.Bits.zeros = QamAZeros;
-    //cbus_write(QamCmdReg_ADDR, QamReg.Word);
+    cbus_write(QamCmdReg_ADDR, QamReg.Word);
     /*
     for (int i = 0; i < 200; i++) {
         //receive_qam_status(&QamStatusReg);
         //xprintf("%02x, %02x\r\n",QamStatusReg.Word[0],QamStatusReg.Word[1]);
     };
     */
-
 }
 
 void set_qam_call(void) {
@@ -102,15 +101,37 @@ void set_qam_call(void) {
     TxReg.Bits.TxMode = TxReg_Mode_QAM_AUTO;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    //cbus_write(TxReg_ADDR, TxReg.Word);
+    cbus_write(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    //cbus_write(RxReg_ADDR, RxReg.Word);
+    cbus_write(RxReg_ADDR, RxReg.Word);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
     QamReg.Bits.command = QamCall;
     QamReg.Bits.zeros = QamAZeros;
-    //cbus_write(QamCmdReg_ADDR, QamReg.Word);
+    cbus_write(QamCmdReg_ADDR, QamReg.Word);
+}
+
+int get_qam_bps(uint16_t mode) {
+    switch (mode) {
+        case 0b1111:
+            return 14400;
+        case 0b1110:
+            return 12000;
+        case 0b1101:
+        case 0b1100:
+            return 9600;
+        case 0b1011:
+            return 7200;
+        case 0b1010:
+            return 4800;
+        case 0b1001:
+            return 2400;
+        case 0b1000:
+            return 1200;
+        default:
+            return 0;
+    }
 }

@@ -8,11 +8,14 @@
 #include "main.h"
 #include "xprintf.h"
 
-uint8_t Is_1stInt=1;
+uint8_t Is_1stInt = 1;
 uint8_t TX_buffer[N_TX_BUFFER];
-uint8_t RX_buffer[N_RX_BUFFER];
+uint8_t CMD_buffer[N_CMD_BUFFER];
 int TX_ptr = 0;
 int RX_ptr = 0;
+int Cmd_Reary = 0;
+
+int Is_gse = 0;
 
 extern UART_HandleTypeDef huart2;
 extern TIM_HandleTypeDef htim2;
@@ -72,10 +75,16 @@ void cbus_read(uint8_t adr, uint16_t *data) {
     HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
 }
 
-void CMX869B_Init(void) {
+//******************************************************
+// C-BUS操作関数
+//******************************************************
+void CMX869B_Init(int is_gse) {
     // グローバルリセット
     uint16_t rx_data;
     cbus_write(General_Reset_ADDR, 0);
+
+    //モード通知
+    Is_gse = is_gse;
 
     // ステータス確認
     CBUS_ST_READ(&StatusReg.Word);
@@ -99,13 +108,13 @@ void CMX869B_Init(void) {
     HAL_Delay(1);
 
     // モデム送受信の設定
-    //set_bell();
-    //set_v22_ans();
-    //set_v22_call();
-    //set_v22_loop();
-    set_qam_answer();
-    //set_qam_call();
-
+    set_bell();
+    /*
+    if (is_gse) {
+        set_qam_call();
+    }else {
+        set_qam_answer();
+    }
     //ネゴシエーションの結果取得と送信タイマの設定
     //失敗した場合はv22にフォールバック
     HAL_Delay(10000);
@@ -118,7 +127,7 @@ void CMX869B_Init(void) {
     }else {
         __HAL_TIM_SET_AUTORELOAD(&htim2, bps);
     }
-
+    */
     //受信割込許可
     GRE.Bits.IrqMask = 0b000001;
     CBUS_GRE_WRITE(GRE.Word);
@@ -127,6 +136,28 @@ void CMX869B_Init(void) {
     //HAL_TIM_Base_Start_IT(&htim2);
 }
 
+//************************
+// 受信割込
+//************************
+void TM2_POLLING_INT(void) {
+    static uint16_t rx_data = 0;
+    //ステータス確認
+    CBUS_ST_READ(&StatusReg.Word);
+    //受信データが来ていれば
+    if (StatusReg.Bits.RxDataReady == 1) {
+        CBUS_DATA_READ(&rx_data);
+        CBUS_ST_READ(&StatusReg.Word);
+        if (Is_gse == 1) {
+            uart_putc(rx_data);
+        } else {
+            xprintf("%d", rx_data);
+        }
+    };
+}
+
+//************************
+// 受信割込
+//************************
 void EXEC_C_INT(void) {
     static uint16_t rx_data = 0;
     //ステータス確認
@@ -135,6 +166,33 @@ void EXEC_C_INT(void) {
     if (StatusReg.Bits.RxDataReady == 1) {
         CBUS_DATA_READ(&rx_data);
         CBUS_ST_READ(&StatusReg.Word);
-        xprintf("%d", rx_data);
+        //GSEなら受信データをすぐUARTに投げる
+        if (Is_gse == 1) {
+            uart_putc(rx_data);
+        } else {
+            //Drillならコマンド構成
+            if (Cmd_Reary==0) {
+                if (RX_ptr == '$') RX_ptr = 0;
+                CMD_buffer[RX_ptr] = rx_data;
+                if (RX_ptr<(N_CMD_BUFFER-1)) RX_ptr++;
+                if (RX_ptr == '#') {
+                    CMD_buffer[RX_ptr++] = 0;
+                    Cmd_Reary=1;
+                    xprintf("%s", CMD_buffer);
+                }
+            }
+        }
     };
+}
+
+//************************
+// xprintf用
+//************************
+void uart_putc(unsigned char c) {
+    // 送信データレジスタが空（TXE: Transmit Data Register Empty）になるのを待つ
+    while (!(USART2->ISR & USART_ISR_TXE)) {
+        // 必要に応じて無限ループ防止用のカウンターなどを追加
+    }
+    // 送信データレジスタに直接書き込む
+    USART2->TDR = c;
 }

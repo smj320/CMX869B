@@ -22,7 +22,7 @@ void HKLoop() {
     static int count = 0;
 
     for (;;) {
-        CBUS_DATA_WRITE(count++%10);
+        CBUS_DATA_WRITE('0'+count++%10);
         HAL_Delay(20);
     }
 }

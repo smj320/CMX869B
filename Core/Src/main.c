@@ -103,14 +103,14 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   //ジャンパークローズの場合はGSE
+  int mode_gse = 0;
   if (GPIO_PIN_RESET == HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin)) {
-    MODEM_MODE_GSE = 1;
+    mode_gse = 1;
   }
-  // xprintの実働関数の登録
-  void uart_putc(unsigned char c);
+  // xprintの実働関数の登録,uart_putcはCMX869B.cで定義
   xdev_out(uart_putc);
   // モデム初期化
-  CMX869B_Init();
+  CMX869B_Init(mode_gse);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -368,17 +368,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-//************************
-// xprintf用
-//************************
-void uart_putc(unsigned char c) {
-  // 送信データレジスタが空（TXE: Transmit Data Register Empty）になるのを待つ
-  while (!(USART2->ISR & USART_ISR_TXE)) {
-    // 必要に応じて無限ループ防止用のカウンターなどを追加
-  }
-  // 送信データレジスタに直接書き込む
-  USART2->TDR = c;
-}
 //************************
 // 外部割り込み対策
 //************************

@@ -122,7 +122,7 @@ typedef union {
     } __attribute__((packed)) Bits;
 } CMX869B_QamStatusReg_TypeDef;
 
-void CMX869B_Init();
+void CMX869B_Init(int is_gse);
 void cbus_write(uint8_t addr, uint16_t data);
 void cbus_read(uint8_t addr, uint16_t *data);
 #define CBUS_GRE_WRITE(x) cbus_write(GRE_ADDR, x);
@@ -138,10 +138,10 @@ void set_v22_loop(void);
 void set_qam_call(void);
 void set_qam_answer(void);
 int  get_qam_bps(uint16_t mode);
-
 void EXEC_C_INT(void);
+void uart_putc(unsigned char c);
 
 #define N_TX_BUFFER 40
-#define N_RX_BUFFER 40
+#define N_CMD_BUFFER 40
 
 #endif //CMX869B_CMX869B_H

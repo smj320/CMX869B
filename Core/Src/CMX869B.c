@@ -10,7 +10,7 @@
 
 uint8_t TX_buffer[N_TX_BUFFER];
 uint8_t CMD_buffer[N_CMD_BUFFER];
-int TX_ptr = 0;
+int TX_ptr = N_TX_BUFFER;
 int RX_ptr = 0;
 int Cmd_Reary = 0;
 int Is_gse = 0;
@@ -76,7 +76,7 @@ void cbus_read(uint8_t adr, uint16_t *data) {
 //******************************************************
 void CMX869B_Init(int is_gse) {
     // グローバルリセット
-    uint16_t rx_data;
+    int n_tim2=0;
     cbus_write(General_Reset_ADDR, 0);
 
     //モード通知
@@ -94,8 +94,8 @@ void CMX869B_Init(int is_gse) {
     GRE.Bits.Pwr = 1;
     GRE.Bits.HighGain = 1;
     GRE.Bits.PatDet = 1;
-    //GRE.Bits.LB = 0;
-    GRE.Bits.LB = 1;
+    GRE.Bits.LB = 0;
+    //GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
     GRE.Bits.IrqMask = 0b000000;
@@ -104,32 +104,39 @@ void CMX869B_Init(int is_gse) {
     HAL_Delay(1);
 
     // モデム送受信の設定
-    set_bell();
-    /*
+    //set_bell();
+    //set_v22_loop();
     if (is_gse) {
         set_qam_call();
+        uint8_t tic=0;
+        do {
+            CBUS_QAM_ST_READ(&QamStatusReg.Word);
+            xprintf("%03d %02X %02X\r\n",
+                tic,QamStatusReg.Bits.Messages, QamStatusReg.Bits.Mode);
+            HAL_Delay(200);
+            tic++;
+        }while (QamStatusReg.Bits.Messages<0b1000);
     }else {
         set_qam_answer();
+    }
+    for (int i=0; i<100; i++) {
+        CBUS_QAM_ST_READ(&QamStatusReg.Word);
+        xprintf("%02X %02X\r\n",
+            QamStatusReg.Bits.Messages, QamStatusReg.Bits.Mode);
+        HAL_Delay(100);
     }
     //ネゴシエーションの結果取得と送信タイマの設定
     //失敗した場合はv22にフォールバック
     HAL_Delay(10000);
     CBUS_QAM_ST_READ(&QamStatusReg.Word);
-    int bps = get_qam_bps(QamStatusReg.Bits.Mode);
-    if (bps == 0) {
-        bps = 1200;
-        set_v22_loop();
-        __HAL_TIM_SET_AUTORELOAD(&htim2, bps);
-    }else {
-        __HAL_TIM_SET_AUTORELOAD(&htim2, bps);
-    }
-    */
+    n_tim2 = get_qam_itm2(0);
+
     //受信割込許可
     GRE.Bits.IrqMask = 0b000001;
     CBUS_GRE_WRITE(GRE.Word);
 
     //送信タイマ動作スタート
-    __HAL_TIM_SET_AUTORELOAD(&htim2, 9);
+    __HAL_TIM_SET_AUTORELOAD(&htim2, n_tim2);
     HAL_TIM_Base_Start_IT(&htim2);
 }
 //******************************************************
@@ -145,7 +152,7 @@ void CMX869B_write_buffered(const uint8_t data[], int len) {
 //************************
 // 送信ポーリング
 //************************
-void CMX869B_POLL_INT(void) {
+void CMX869B_TIM2_INT(void) {
     if (TX_ptr<N_TX_BUFFER) {
         CBUS_DATA_WRITE(TX_buffer[TX_ptr++]);
     }

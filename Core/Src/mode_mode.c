@@ -37,12 +37,12 @@ void set_v22_call(void) {
     TxReg.Bits.TxMode = TxReg_Mode_V22_CALL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    //cbus_write(TxReg_ADDR, TxReg.Word);
+    cbus_write(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_V22_CALL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    //cbus_write(RxReg_ADDR, RxReg.Word);
+    cbus_write(RxReg_ADDR, RxReg.Word);
 }
 
 void set_v22_ans(void) {
@@ -50,12 +50,12 @@ void set_v22_ans(void) {
     TxReg.Bits.TxMode = TxReg_Mode_V22_ANS;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    //cbus_write(TxReg_ADDR, TxReg.Word);
+    cbus_write(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_V22_ANS;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    //cbus_write(RxReg_ADDR, RxReg.Word);
+    cbus_write(RxReg_ADDR, RxReg.Word);
 }
 
 void set_v22_loop(void) {
@@ -63,12 +63,12 @@ void set_v22_loop(void) {
     TxReg.Bits.TxMode = TxReg_Mode_V22_ANS;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    //cbus_write(TxReg_ADDR, TxReg.Word);
+    cbus_write(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_V22_CALL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    //cbus_write(RxReg_ADDR, RxReg.Word);
+    cbus_write(RxReg_ADDR, RxReg.Word);
 }
 
 // Auto modem
@@ -114,24 +114,33 @@ void set_qam_call(void) {
     cbus_write(QamCmdReg_ADDR, QamReg.Word);
 }
 
-int get_qam_bps(uint16_t mode) {
+int get_qam_itm2(uint16_t mode) {
+    int bps = 0;
+    int tim2 = 0;
     switch (mode) {
-        case 0b1111:
-            return 14400;
-        case 0b1110:
-            return 12000;
-        case 0b1101:
+        case 0b1111: //14400
+            bps = 14400;
+            break;
+        case 0b1110: //12000
+            bps = 12000;
+            break;
+        case 0b1101: //9600
         case 0b1100:
-            return 9600;
-        case 0b1011:
-            return 7200;
-        case 0b1010:
-            return 4800;
-        case 0b1001:
-            return 2400;
-        case 0b1000:
-            return 1200;
+            bps = 9600;
+            break;
+        case 0b1011: //7200
+            bps = 7200;
+            break;
+        case 0b1010: //4800
+            bps = 4800;
+            break;
+        case 0b1001: //2400
+            bps = 2400;
+            break;
         default:
-            return 0;
+            bps = 1200;
+            break;
     }
+    tim2 = 100*1200/bps-1;
+    return tim2;
 }

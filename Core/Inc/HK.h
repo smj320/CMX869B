@@ -5,6 +5,6 @@
 #ifndef CMX869B_HK_H
 #define CMX869B_HK_H
 
-void HKLoop();
+void HKLoop(int is_gse);
 
 #endif //CMX869B_HK_H

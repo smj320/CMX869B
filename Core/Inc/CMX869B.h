@@ -124,7 +124,7 @@ typedef union {
 
 void CMX869B_Init(int is_gse);
 void CMX869B_RCV_INT(void);
-void CMX869B_POLL_INT(void);
+void CMX869B_TIM2_INT(void);
 void CMX869B_write_buffered(const uint8_t data[], int len);
 //
 void cbus_write(uint8_t addr, uint16_t data);
@@ -141,8 +141,7 @@ void set_v22_answer(void);
 void set_v22_loop(void);
 void set_qam_call(void);
 void set_qam_answer(void);
-int  get_qam_bps(uint16_t mode);
-void EXEC_C_INT(void);
+int  get_qam_itm2(uint16_t mode);
 void uart_putc(unsigned char c);
 
 

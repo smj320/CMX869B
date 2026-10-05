@@ -115,7 +115,7 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-    HKLoop();
+    HKLoop(mode_gse);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -234,7 +234,7 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 7999;
+  htim2.Init.Prescaler = 799;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -403,7 +403,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 1 */
   if (htim->Instance == TIM2)
   {
-    CMX869B_POLL_INT();
+    CMX869B_TIM2_INT();
   }
   /* USER CODE END Callback 1 */
 }

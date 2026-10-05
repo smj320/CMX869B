@@ -377,7 +377,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   {
     // 割り込み発生時の処理（フラグ操作やLEDのトグルなど）
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port,CPU_MON_Pin,GPIO_PIN_SET);
-    EXEC_C_INT();
+    CMX869B_RCV_INT();
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port,CPU_MON_Pin,GPIO_PIN_RESET);
   }
 }
@@ -403,7 +403,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 1 */
   if (htim->Instance == TIM2)
   {
-    //HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
+    CMX869B_POLL_INT();
   }
   /* USER CODE END Callback 1 */
 }

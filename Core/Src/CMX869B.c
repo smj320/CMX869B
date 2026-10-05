@@ -8,13 +8,11 @@
 #include "main.h"
 #include "xprintf.h"
 
-uint8_t Is_1stInt = 1;
 uint8_t TX_buffer[N_TX_BUFFER];
 uint8_t CMD_buffer[N_CMD_BUFFER];
 int TX_ptr = 0;
 int RX_ptr = 0;
 int Cmd_Reary = 0;
-
 int Is_gse = 0;
 
 extern UART_HandleTypeDef huart2;
@@ -26,8 +24,6 @@ CMX869B_RxReg_TypeDef RxReg = {0};
 CMX869B_QamReg_TypeDef QamReg = {0};
 CMX869B_StatusReg_TypeDef StatusReg = {0};
 CMX869B_QamStatusReg_TypeDef QamStatusReg = {0};
-//
-extern int MODEM_MODE_GSE;
 
 //******************************************************
 // C-BUS操作関数
@@ -133,32 +129,32 @@ void CMX869B_Init(int is_gse) {
     CBUS_GRE_WRITE(GRE.Word);
 
     //送信タイマ動作スタート
-    //HAL_TIM_Base_Start_IT(&htim2);
+    __HAL_TIM_SET_AUTORELOAD(&htim2, 9);
+    HAL_TIM_Base_Start_IT(&htim2);
+}
+//******************************************************
+// 送信バッファ書き込み
+//******************************************************
+void CMX869B_write_buffered(const uint8_t data[], int len) {
+    for (int l=0; l<len; l++) {
+        TX_buffer[l] = data[l];
+    }
+    TX_ptr = 0;
+}
+
+//************************
+// 送信ポーリング
+//************************
+void CMX869B_POLL_INT(void) {
+    if (TX_ptr<N_TX_BUFFER) {
+        CBUS_DATA_WRITE(TX_buffer[TX_ptr++]);
+    }
 }
 
 //************************
 // 受信割込
 //************************
-void TM2_POLLING_INT(void) {
-    static uint16_t rx_data = 0;
-    //ステータス確認
-    CBUS_ST_READ(&StatusReg.Word);
-    //受信データが来ていれば
-    if (StatusReg.Bits.RxDataReady == 1) {
-        CBUS_DATA_READ(&rx_data);
-        CBUS_ST_READ(&StatusReg.Word);
-        if (Is_gse == 1) {
-            uart_putc(rx_data);
-        } else {
-            xprintf("%d", rx_data);
-        }
-    };
-}
-
-//************************
-// 受信割込
-//************************
-void EXEC_C_INT(void) {
+void CMX869B_RCV_INT(void) {
     static uint16_t rx_data = 0;
     //ステータス確認
     CBUS_ST_READ(&StatusReg.Word);

@@ -19,10 +19,13 @@ extern int RX_ptr;
 // HK生成とか
 //********************************************
 void HKLoop() {
-    static int count = 0;
+    static uint8_t flame[N_TX_BUFFER] = {0};
 
     for (;;) {
-        CBUS_DATA_WRITE('0'+count++%10);
-        HAL_Delay(20);
+        for (int i=0;i<N_TX_BUFFER;i++) {
+            flame[i]='0'+i%10;
+        }
+        CMX869B_write_buffered(flame,N_TX_BUFFER);
+        HAL_Delay(1000);
     }
 }

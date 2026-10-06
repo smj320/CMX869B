@@ -111,20 +111,25 @@ void CMX869B_Init(int is_gse) {
         uint8_t tic=0;
         do {
             CBUS_QAM_ST_READ(&QamStatusReg.Word);
-            xprintf("%03d %02X %02X\r\n",
-                tic,QamStatusReg.Bits.Messages, QamStatusReg.Bits.Mode);
-            HAL_Delay(200);
+            HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
+            xprintf("%03d %04X\r\n",
+                tic,QamStatusReg.Word);
+            HAL_Delay(500);
             tic++;
-        }while (QamStatusReg.Bits.Messages<0b1000);
+        }while (QamStatusReg.Bits.Mode<0b1000);
     }else {
         set_qam_answer();
+        static uint8_t tic=0;
+        do {
+            CBUS_QAM_ST_READ(&QamStatusReg.Word);
+            HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
+            xprintf("%03d %04X\r\n",
+                tic,QamStatusReg.Word);
+            HAL_Delay(500);
+            tic++;
+        }while (QamStatusReg.Bits.Mode<0b1000);
     }
-    for (int i=0; i<100; i++) {
-        CBUS_QAM_ST_READ(&QamStatusReg.Word);
-        xprintf("%02X %02X\r\n",
-            QamStatusReg.Bits.Messages, QamStatusReg.Bits.Mode);
-        HAL_Delay(100);
-    }
+
     //ネゴシエーションの結果取得と送信タイマの設定
     //失敗した場合はv22にフォールバック
     HAL_Delay(10000);

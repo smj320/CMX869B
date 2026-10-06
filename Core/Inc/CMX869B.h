@@ -106,7 +106,7 @@ typedef union {
     struct {
         uint16_t br : 3;
         uint16_t command : 3; //Calling/Answer
-        uint16_t zeros : 13;
+        uint16_t zeros : 10;
     }  __attribute__((packed)) Bits;
 } CMX869B_QamReg_TypeDef;
 

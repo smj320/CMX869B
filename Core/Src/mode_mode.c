@@ -17,14 +17,19 @@ extern CMX869B_QamReg_TypeDef QamReg;
 extern CMX869B_StatusReg_TypeDef StatusReg;
 extern CMX869B_QamStatusReg_TypeDef QamStatusReg;
 
+#define TX_LEVEL 0b111
+#define RX_LEVEL 0b111
+
 void set_bell(void) {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_BELL;
+    TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
     cbus_write(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_BELL;
+    RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
     cbus_write(RxReg_ADDR, RxReg.Word);
@@ -35,11 +40,13 @@ void set_bell(void) {
 void set_v22_call(void) {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_V22_CALL;
+    TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
     cbus_write(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_V22_CALL;
+    RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
     cbus_write(RxReg_ADDR, RxReg.Word);
@@ -48,11 +55,13 @@ void set_v22_call(void) {
 void set_v22_ans(void) {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_V22_ANS;
+    TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
     cbus_write(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_V22_ANS;
+    RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
     cbus_write(RxReg_ADDR, RxReg.Word);
@@ -61,11 +70,13 @@ void set_v22_ans(void) {
 void set_v22_loop(void) {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_V22_ANS;
+    TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
     cbus_write(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_V22_CALL;
+    RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
     cbus_write(RxReg_ADDR, RxReg.Word);
@@ -75,42 +86,40 @@ void set_v22_loop(void) {
 void set_qam_answer(void) {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_QAM_AUTO;
+    TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
     cbus_write(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
+    RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
     cbus_write(RxReg_ADDR, RxReg.Word);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
     QamReg.Bits.command = QamAnswer;
-    QamReg.Bits.zeros = QamAZeros;
+    QamReg.Bits.zeros = QamZeros;
     cbus_write(QamCmdReg_ADDR, QamReg.Word);
-    /*
-    for (int i = 0; i < 200; i++) {
-        //receive_qam_status(&QamStatusReg);
-        //xprintf("%02x, %02x\r\n",QamStatusReg.Word[0],QamStatusReg.Word[1]);
-    };
-    */
 }
 
 void set_qam_call(void) {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_QAM_AUTO;
+    TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
     cbus_write(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
+    RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
     cbus_write(RxReg_ADDR, RxReg.Word);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
     QamReg.Bits.command = QamCall;
-    QamReg.Bits.zeros = QamAZeros;
+    QamReg.Bits.zeros = QamZeros;
     cbus_write(QamCmdReg_ADDR, QamReg.Word);
 }
 
@@ -126,7 +135,7 @@ int get_qam_itm2(uint16_t mode) {
             break;
         case 0b1101: //9600
         case 0b1100:
-            bps = 9600;
+            bps = (int)(9600*0.8);
             break;
         case 0b1011: //7200
             bps = 7200;

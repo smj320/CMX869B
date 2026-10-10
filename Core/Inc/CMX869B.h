@@ -100,7 +100,7 @@ typedef union {
 #define QamMaxBR_9600 0b101
 #define QamCall 0b010
 #define QamAnswer 0b011
-#define QamAZeros 0b0000000000000
+#define QamZeros 0b0000000000
 typedef union {
     uint16_t  Word;
     struct {

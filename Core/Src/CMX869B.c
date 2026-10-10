@@ -85,14 +85,16 @@ void CMX869B_Init(int is_gse) {
     // ステータス確認
     CBUS_ST_READ(&StatusReg.Word);
 
-    // リセットビットでリセット
+    // Pwr=1,Rst=1で20ms以上保持して内部ロジックを確定させる(データシート GCR b8)
+    // ここで水晶が発振する。
+    GRE.Bits.Pwr = 1;
     GRE.Bits.Rst = 1;
     CBUS_GRE_WRITE(GRE.Word);
-    HAL_Delay(1);
+    HAL_Delay(25);
 
     //send_cmdで、うまくいくと22pinが発振する
-    GRE.Bits.Pwr = 1;
-    GRE.Bits.HighGain = 1;
+    //GRE.Bits.HighGain = 1;
+    GRE.Bits.HighGain = 0;
     GRE.Bits.PatDet = 1;
     GRE.Bits.LB = 0;
     //GRE.Bits.LB = 1;
@@ -108,33 +110,21 @@ void CMX869B_Init(int is_gse) {
     //set_v22_loop();
     if (is_gse) {
         set_qam_call();
-        uint8_t tic=0;
-        do {
-            CBUS_QAM_ST_READ(&QamStatusReg.Word);
-            HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
-            xprintf("%03d %04X\r\n",
-                tic,QamStatusReg.Word);
-            HAL_Delay(500);
-            tic++;
-        }while (QamStatusReg.Bits.Mode<0b1000);
     }else {
         set_qam_answer();
-        static uint8_t tic=0;
-        do {
-            CBUS_QAM_ST_READ(&QamStatusReg.Word);
-            HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
-            xprintf("%03d %04X\r\n",
-                tic,QamStatusReg.Word);
-            HAL_Delay(500);
-            tic++;
-        }while (QamStatusReg.Bits.Mode<0b1000);
+    }
+    //ハンドシェーク監視
+    for (int tic=0; tic<2*60; tic++) {
+        CBUS_QAM_ST_READ(&QamStatusReg.Word);
+        HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
+        xprintf("%03d %04X\r\n",
+            tic,QamStatusReg.Word);
+        HAL_Delay(500);
     }
 
     //ネゴシエーションの結果取得と送信タイマの設定
-    //失敗した場合はv22にフォールバック
-    HAL_Delay(10000);
     CBUS_QAM_ST_READ(&QamStatusReg.Word);
-    n_tim2 = get_qam_itm2(0);
+    n_tim2 = get_qam_itm2(QamStatusReg.Bits.Mode);
 
     //受信割込許可
     GRE.Bits.IrqMask = 0b000001;

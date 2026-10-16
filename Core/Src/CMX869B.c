@@ -108,14 +108,14 @@ void CMX869B_Init(int is_gse) {
     // モデム送受信の設定
 #define MD_CAL 1
 #define MD_LOOP 2
-#define MODE MD_CAL
-    // #define MODE MD_LOOP
-
+//#define MODE MD_CAL
+#define MODE MD_LOOP
 #if MODE == MD_CAL
     set_bell();
     while (1);
 #elif MODE == MD_LOOP
-    set_v22_loop();
+    set_bell();
+    //set_v22_loop();
 #else
     if (is_gse) {
         set_qam_call();
@@ -140,7 +140,8 @@ void CMX869B_Init(int is_gse) {
     n_tim2 = get_qam_itm2(QamStatusReg.Bits.Mode);
 #endif
     //受信割込許可
-    GRE.Bits.IrqMask = 0b000001;
+    //GRE.Bits.IrqMask = 0b000001;
+    GRE.Bits.IrqMask = 0b000000;
     CBUS_GRE_WRITE(GRE.Word);
 
     //送信タイマ動作スタート

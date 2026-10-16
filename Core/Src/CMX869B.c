@@ -76,7 +76,7 @@ void cbus_read(uint8_t adr, uint16_t *data) {
 //******************************************************
 void CMX869B_Init(int is_gse) {
     // グローバルリセット
-    int n_tim2=0;
+    int n_tim2 = 0;
     cbus_write(General_Reset_ADDR, 0);
 
     //モード通知
@@ -107,19 +107,26 @@ void CMX869B_Init(int is_gse) {
 
     // モデム送受信の設定
     //set_bell();
+    //while (1);
     //set_v22_loop();
+
     if (is_gse) {
         set_qam_call();
-    }else {
+    } else {
         set_qam_answer();
     }
+
     //ハンドシェーク監視
-    for (int tic=0; tic<2*60; tic++) {
+    for (uint8_t tic = 0; tic < 240; tic++) {
         CBUS_QAM_ST_READ(&QamStatusReg.Word);
         HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
-        xprintf("%03d %04X\r\n",
-            tic,QamStatusReg.Word);
+        xprintf("GSE:%d TI:%03d MSG:%02X SNR:%02X MODE:%02X\r\n",
+                Is_gse,
+                tic, QamStatusReg.Bits.Messages,
+                QamStatusReg.Bits.SNR,
+                QamStatusReg.Bits.Mode);
         HAL_Delay(500);
+        tic++;
     }
 
     //ネゴシエーションの結果取得と送信タイマの設定
@@ -133,12 +140,14 @@ void CMX869B_Init(int is_gse) {
     //送信タイマ動作スタート
     __HAL_TIM_SET_AUTORELOAD(&htim2, n_tim2);
     HAL_TIM_Base_Start_IT(&htim2);
+    xprintf("Initialized\r\n");
 }
+
 //******************************************************
 // 送信バッファ書き込み
 //******************************************************
 void CMX869B_write_buffered(const uint8_t data[], int len) {
-    for (int l=0; l<len; l++) {
+    for (int l = 0; l < len; l++) {
         TX_buffer[l] = data[l];
     }
     TX_ptr = 0;
@@ -148,7 +157,7 @@ void CMX869B_write_buffered(const uint8_t data[], int len) {
 // 送信ポーリング
 //************************
 void CMX869B_TIM2_INT(void) {
-    if (TX_ptr<N_TX_BUFFER) {
+    if (TX_ptr < N_TX_BUFFER) {
         CBUS_DATA_WRITE(TX_buffer[TX_ptr++]);
     }
 }
@@ -169,13 +178,13 @@ void CMX869B_RCV_INT(void) {
             uart_putc(rx_data);
         } else {
             //Drillならコマンド構成
-            if (Cmd_Reary==0) {
+            if (Cmd_Reary == 0) {
                 if (RX_ptr == '$') RX_ptr = 0;
                 CMD_buffer[RX_ptr] = rx_data;
-                if (RX_ptr<(N_CMD_BUFFER-1)) RX_ptr++;
+                if (RX_ptr < (N_CMD_BUFFER - 1)) RX_ptr++;
                 if (RX_ptr == '#') {
                     CMD_buffer[RX_ptr++] = 0;
-                    Cmd_Reary=1;
+                    Cmd_Reary = 1;
                     xprintf("%s", CMD_buffer);
                 }
             }

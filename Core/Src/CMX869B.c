@@ -96,8 +96,8 @@ void CMX869B_Init(int is_gse) {
     //GRE.Bits.HighGain = 1;
     GRE.Bits.HighGain = 0;
     GRE.Bits.PatDet = 1;
-    GRE.Bits.LB = 0;
-    //GRE.Bits.LB = 1;
+    //GRE.Bits.LB = 0;
+    GRE.Bits.LB = 1;
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
     GRE.Bits.IrqMask = 0b000000;
@@ -106,16 +106,22 @@ void CMX869B_Init(int is_gse) {
     HAL_Delay(1);
 
     // モデム送受信の設定
-    //set_bell();
-    //while (1);
-    //set_v22_loop();
+#define MD_CAL 1
+#define MD_LOOP 2
+#define MODE MD_CAL
+    // #define MODE MD_LOOP
 
+#if MODE == MD_CAL
+    set_bell();
+    while (1);
+#elif MODE == MD_LOOP
+    set_v22_loop();
+#else
     if (is_gse) {
         set_qam_call();
     } else {
         set_qam_answer();
     }
-
     //ハンドシェーク監視
     for (uint8_t tic = 0; tic < 240; tic++) {
         CBUS_QAM_ST_READ(&QamStatusReg.Word);
@@ -132,7 +138,7 @@ void CMX869B_Init(int is_gse) {
     //ネゴシエーションの結果取得と送信タイマの設定
     CBUS_QAM_ST_READ(&QamStatusReg.Word);
     n_tim2 = get_qam_itm2(QamStatusReg.Bits.Mode);
-
+#endif
     //受信割込許可
     GRE.Bits.IrqMask = 0b000001;
     CBUS_GRE_WRITE(GRE.Word);

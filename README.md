@@ -1,5 +1,97 @@
 # CMX869B
 
+## 送信後のステータス
+
+ループバックでの送信で、1msecごとにステータスレジスタを見ると、
+送信直後、送信レジスタが空いていないときはTxRdy=0, TxUdr=0
+送信レジスタが空いて,物理的な送信も完了するとTxUnd=1になる。
+その後RxRdyが1になる。
+
+```aiignore
+05 TxRdy:0 TxUnd:0 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:0 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:0 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:0 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:0 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+```
+
+割込線は1になるとLOWになるという単純なもの。エッジ検出にするか
+どうかはCPU側で決まる。
+
+ステータスレジスタを読むと、割込線は一旦元に戻る。
+戻った後は、次の割込要因のビット変動がないと再割込はかからない。
+
+RxOverflowが出た場合は、上書きされてしまっているので、一つ前の
+ビットは抜けることになる。
+
+HDLCで送受信するなら、パケットレベルのCRCエラーになる。
+
+### tips
+言語注入の背景書が見づらいので消す。
+Settings → Editor → Color Scheme → General → Code → Injected language fragment
+
+## グルー関数について
+
+```aiignore
+embedded（組み込み）の世界で「車輪の再発明」を避けてうまく既存の仕組みに乗っかるための、
+定番アプローチをいくつか整理してみました。
+
+1. lwIP公式のひな形（ethernetif.c）を改造する
+lwIPのソースツリー（contrib フォルダなど）には、ドライバのテンプレートである 
+ethernetif.c が用意されています。
+
+これをそのまま使うのは無理でも、「lwIPの pbuf とハードウェアドライバをどう繋いでいるか」
+の公式のリファレンス実装として非常に参考になります。
+
+自前のHDLCドライバ層も、このテンプレートの骨組み（初期化、linkoutput、
+入力スレッドの構造）をそのまま流用・リファクタリングして作ると、車輪の再発明をかなり回避できます。
+
+2. 自前でリングバッファを書かず、FreeRTOSのプリミティブを信頼する
+バイト単位やフレーム単位のやり取りでバッファが必要になったとき、配列とインデックスを
+自分で管理するバグだらけのリングバッファを書きがちですが、FreeRTOSの標準機能を使うのが安全です。
+
+StreamBuffer / MessageBuffer:
+FreeRTOSには、可変長メッセージやバイトストリームを安全にやり取りするための優秀な
+バッファ機能が標準で備わっています（内部の排他制御も完璧に作り込まれています）。
+
+これをハードウェア割込と受信タスクの間の「安全なパイプ」として使えば、バッファ管理の苦労から解放されます。
+
+3. プロトコル層の選択（SLIPやPPPという先人たちの知恵）
+もしCMX869BのHDLC経由でIPパケットを流す場合、フル規格のイーサネットフレームを模倣するだけでなく、
+lwIPが標準で持っているシリアル系プロトコルを流用するという手もあります。
+
+lwIPには SLIP (Serial Line Internet Protocol) や PPP といった、
+シリアル回線上でIPパケットを通すための枯れたモジュールが最初から入っています。
+
+「HDLCのフレーミングはあるけれど、Ethernetヘッダー（MACアドレスなど）
+の処理を省いてIPパケットだけダイレクトに流したい」という要件であれば、
+SLIPの仕組みやパケット構造のハンドリング方法がそのまま大きなヒントになります。
+
+今回の構成（CMX869B ＋ FreeRTOS ＋ lwIP）において、一番手間の少ない「美味しいところ取り」
+をするなら、ハードウェアとの送受信バッファにはFreeRTOSのMessageBufferを使い、
+lwIP側との結合には公式の netif 構造体の作法（linkoutput と input）
+を最小限のコードで実装する という形が一番手堅そうですね。
+
+ちなみに、今回のハードウェア構成（CMX869Bを用いた南極のドリル監視などの通信サブシステム）では、
+ドライバ層は自作しつつ、OSやプロトコルスタックの部分はどのあたりまで既存のものを組み込む予定で進められていますか？
+```
+
+
 ## Automodemハンドシェーク成功
 送信バッファを両電源の5Vで、倍率５倍にする。
 ケーブルダミーを繋いでのSNRは6

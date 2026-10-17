@@ -22,7 +22,7 @@ extern CMX869B_StatusReg_TypeDef StatusReg;
 //********************************************
 void HKLoop(int is_gse) {
     static uint8_t flame[N_TX_BUFFER] = {0};
-    uint16_t rx_data;
+    uint16_t tx_data, rx_data;
 
     //GSEの場合はUARTを監視して、データがくればモデムになげる
     //Bitrateはパソコンのほうが早いので、送信に当たっては
@@ -37,34 +37,52 @@ void HKLoop(int is_gse) {
     */
     //Drillの場合はフレーム転送モード
     int nn = 0;
-    int nw = 10;
+    int nw = 20;
     CMX869B_StatusReg_TypeDef st[100];
     for (;;) {
         //送信後のステータスを見てみる
         xprintf("%04d--------\r\n", nn);
-        xprintf("TX----\r\n", nn++);
-        CBUS_DATA_WRITE('A');
+        xprintf("TX----\r\n", nn);
+        TX_ptr=1;
+        CBUS_ST_READ(&StatusReg.Word);
+        CBUS_DATA_WRITE(TX_buffer[0]);
+        //CBUS_ST_READ(&StatusReg.Word);
+        /*
+        xprintf("Status: %02d %02d %02d %02d\r\n",
+            StatusReg.Bits.TxDataReady, StatusReg.Bits.TxDataUnderflow,
+            StatusReg.Bits.RxDataReady, StatusReg.Bits.RxDataOverflow);
+        CBUS_DATA_WRITE(TX_buffer[0]);
+        */
+        /*
         for (int i = 0; i < nw; i++) {
+            //ステータスを読んでいるだけなので、割込線の挙動はいかに
+            //読んでまた戻るか
             CBUS_ST_READ(&StatusReg.Word);
             st[i] = StatusReg;
+            HAL_Delay(1);
         }
         for (int i = 0; i < nw; i++) {
-            xprintf("TxRdy:%d TxUnd:%d RxRdy:%d RxOvr:%d\r\n",
+            xprintf("%02d TxRdy:%d TxUnd:%d RxRdy:%d RxOvr:%d\r\n",
+                tx_data,
                 st[i].Bits.TxDataReady, st[i].Bits.TxDataUnderflow,
                 st[i].Bits.RxDataReady, st[i].Bits.RxDataOverflow);
         }
         HAL_Delay(20);  //Bellの場合、データは10msecで送信出来ている
         xprintf("RX----\r\n", nn);
+        rx_data= 0;
         CBUS_DATA_READ(&rx_data);
-        for (int i = 0; i < nw; i++) {
+        for (int i = 0; i < 5; i++) {
             CBUS_ST_READ(&StatusReg.Word);
             st[i] = StatusReg;
+            HAL_Delay(1);
         }
-        for (int i = 0; i < nw; i++) {
-            xprintf("TxRdy:%d TxUnd:%d RxRdy:%d RxOvr:%d\r\n",
+        for (int i = 0; i < 5; i++) {
+            xprintf("%02d TxRdy:%d TxUnd:%d RxRdy:%d RxOvr:%d\r\n",
+                rx_data,
                 st[i].Bits.TxDataReady, st[i].Bits.TxDataUnderflow,
                 st[i].Bits.RxDataReady, st[i].Bits.RxDataOverflow);
         }
+        */
         HAL_Delay(5000);
         nn++;
     }

@@ -9,10 +9,7 @@
 #include "xprintf.h"
 
 uint8_t TX_buffer[N_TX_BUFFER];
-uint8_t CMD_buffer[N_CMD_BUFFER];
 int TX_ptr = N_TX_BUFFER;
-int RX_ptr = 0;
-int Cmd_Reary = 0;
 int Is_gse = 0;
 
 extern UART_HandleTypeDef huart2;
@@ -76,6 +73,7 @@ void cbus_read(uint8_t adr, uint16_t *data) {
 //******************************************************
 void CMX869B_Init(int is_gse) {
     // グローバルリセット
+    uint16_t rx_data;
     int n_tim2 = 0;
     cbus_write(General_Reset_ADDR, 0);
 
@@ -108,7 +106,7 @@ void CMX869B_Init(int is_gse) {
     // モデム送受信の設定
 #define MD_CAL 1
 #define MD_LOOP 2
-//#define MODE MD_CAL
+    //#define MODE MD_CAL
 #define MODE MD_LOOP
 #if MODE == MD_CAL
     set_bell();
@@ -141,32 +139,15 @@ void CMX869B_Init(int is_gse) {
 #endif
     //受信割込許可
     //GRE.Bits.IrqMask = 0b000001;
-    GRE.Bits.IrqMask = 0b000000;
+    GRE.Bits.IrqMask = 0b001001;
     CBUS_GRE_WRITE(GRE.Word);
+    CBUS_ST_READ(&StatusReg.Word);
 
     //送信タイマ動作スタート
-    __HAL_TIM_SET_AUTORELOAD(&htim2, n_tim2);
-    HAL_TIM_Base_Start_IT(&htim2);
+    //__HAL_TIM_SET_AUTORELOAD(&htim2, n_tim2);
+    //HAL_TIM_Base_Start_IT(&htim2);
+    for (int i = 0; i < N_TX_BUFFER; i++) TX_buffer[i] = i;
     xprintf("Initialized\r\n");
-}
-
-//******************************************************
-// 送信バッファ書き込み
-//******************************************************
-void CMX869B_write_buffered(const uint8_t data[], int len) {
-    for (int l = 0; l < len; l++) {
-        TX_buffer[l] = data[l];
-    }
-    TX_ptr = 0;
-}
-
-//************************
-// 送信ポーリング
-//************************
-void CMX869B_TIM2_INT(void) {
-    if (TX_ptr < N_TX_BUFFER) {
-        CBUS_DATA_WRITE(TX_buffer[TX_ptr++]);
-    }
 }
 
 //************************
@@ -174,29 +155,30 @@ void CMX869B_TIM2_INT(void) {
 //************************
 void CMX869B_RCV_INT(void) {
     static uint16_t rx_data = 0;
-    //ステータス確認
+    //送信系データがないか確認
     CBUS_ST_READ(&StatusReg.Word);
-    //受信データが来ていれば
-    if (StatusReg.Bits.RxDataReady == 1) {
+    if (StatusReg.Bits.RxDataReady == 1 || StatusReg.Bits.RxDataOverflow == 1) {
         CBUS_DATA_READ(&rx_data);
-        CBUS_ST_READ(&StatusReg.Word);
-        //GSEなら受信データをすぐUARTに投げる
-        if (Is_gse == 1) {
-            uart_putc(rx_data);
-        } else {
-            //Drillならコマンド構成
-            if (Cmd_Reary == 0) {
-                if (RX_ptr == '$') RX_ptr = 0;
-                CMD_buffer[RX_ptr] = rx_data;
-                if (RX_ptr < (N_CMD_BUFFER - 1)) RX_ptr++;
-                if (RX_ptr == '#') {
-                    CMD_buffer[RX_ptr++] = 0;
-                    Cmd_Reary = 1;
-                    xprintf("%s", CMD_buffer);
-                }
+        if (StatusReg.Bits.RxDataReady == 1) {
+            xprintf("RX:%03d\r\n", rx_data);
+        }
+    }
+
+    //バスがかち合わないよう時間稼ぎ。ループで送受信があまり近いとダメぽい。
+    for (int i = 0; i < 100; i++)
+
+    //割込処理中にデータ届いている農政もあるので、もう一回見に行く
+    CBUS_ST_READ(&StatusReg.Word);
+    if (StatusReg.Bits.TxDataReady == 1 || StatusReg.Bits.TxDataUnderflow == 1) {
+        if (StatusReg.Bits.TxDataReady == 1) {
+            if (TX_ptr < N_TX_BUFFER) {
+                xprintf("TX:%03d\r\n", TX_buffer[TX_ptr]);
+                CBUS_DATA_WRITE(TX_buffer[TX_ptr++]);
             }
         }
-    };
+    }
+    //念のため割込フラグを戻す
+    CBUS_ST_READ(&StatusReg.Word);
 }
 
 //************************

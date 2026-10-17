@@ -145,7 +145,6 @@ int  get_qam_itm2(uint16_t mode);
 void uart_putc(unsigned char c);
 
 
-#define N_TX_BUFFER 80
-#define N_CMD_BUFFER 16
+#define N_TX_BUFFER 10
 
 #endif //CMX869B_CMX869B_H

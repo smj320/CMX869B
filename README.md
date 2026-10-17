@@ -1,5 +1,42 @@
 # CMX869B
 
+
+## 割込の中でのSPI送信
+
+```aiignore
+// 1. データを送信バッファ（DR）に書き込む
+// （16bitモードなら hspi1.Instance->DR = data; など）
+*(volatile uint8_t*)&(hspi1.Instance->DR) = tx_data; 
+
+// 2. 送信バッファが空（TXE = 1）になるのを待つ（必要に応じて）
+// または、すぐに次のデータを書かないなら省略してBSYだけでもOKですが、
+// 一般的にはTXEが立つのを確認してから次の処理へ進みます。
+while (!(hspi1.Instance->SR & SPI_SR_TXE)) {
+    // 必要ならタイムアウトカウンタを入れるが、
+    // 8Mbpsなら数クロック〜数十クロックですぐに抜けるため通常はループだけでOK
+}
+
+// 3. 【最も重要】通信の完全終了（BSYが0になる）を待つ
+// これを待たないと、まだシフトアウトの途中でCSをHに戻してしまう恐れがあります。
+while (hspi1.Instance->SR & SPI_SR_BSY) {
+    // BSYがクリアされる（通信が物理的に完了する）のを待つ
+}
+```
+## 割込の中でのSPI受信
+
+```aiignore
+// 1. ダミーデータ（または送信したいコマンド）をDRに書いてクロックを発生させる
+*(volatile uint8_t*)&(hspi1.Instance->DR) = tx_data; 
+
+// 2. 送信が完了し、受信バッファに新しいデータが入る（RXNEフラグが1になる）のを待つ
+while (!(hspi1.Instance->SR & SPI_SR_RXNE)) {
+    // 受信完了待ち（8Mbpsなら1µs足らずですぐ抜けます）
+}
+
+// 3. 受信データレジスタ（DR）から読み取る
+uint8_t rx_data = *(volatile uint8_t*)&(hspi1.Instance->DR);
+```
+
 ## 送信後のステータス
 
 ループバックでの送信で、1msecごとにステータスレジスタを見ると、

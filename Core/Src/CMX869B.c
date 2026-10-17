@@ -155,6 +155,7 @@ void CMX869B_Init(int is_gse) {
 //************************
 void CMX869B_RCV_INT(void) {
     static uint16_t rx_data = 0;
+    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
     //送信系データがないか確認
     CBUS_ST_READ(&StatusReg.Word);
     if (StatusReg.Bits.RxDataReady == 1 || StatusReg.Bits.RxDataOverflow == 1) {
@@ -162,10 +163,18 @@ void CMX869B_RCV_INT(void) {
         if (StatusReg.Bits.RxDataReady == 1) {
             xprintf("RX:%03d\r\n", rx_data);
         }
+        //念のため割込フラグを戻す
+        CBUS_ST_READ(&StatusReg.Word);
+        HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+        return;
     }
 
+
     //バスがかち合わないよう時間稼ぎ。ループで送受信があまり近いとダメぽい。
-    for (int i = 0; i < 100; i++)
+    //HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
+    //for (volatile int i = 0; i < 10000; i++) {
+    //}
+    //HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
 
     //割込処理中にデータ届いている農政もあるので、もう一回見に行く
     CBUS_ST_READ(&StatusReg.Word);
@@ -176,9 +185,10 @@ void CMX869B_RCV_INT(void) {
                 CBUS_DATA_WRITE(TX_buffer[TX_ptr++]);
             }
         }
+        //念のため割込フラグを戻す
+        CBUS_ST_READ(&StatusReg.Word);
+        HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
     }
-    //念のため割込フラグを戻す
-    CBUS_ST_READ(&StatusReg.Word);
 }
 
 //************************

@@ -324,14 +324,14 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = C_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(C_CS_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : C_CLK_Pin */
   GPIO_InitStruct.Pin = C_CLK_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(C_CLK_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : C_MISO_Pin */
@@ -346,18 +346,25 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(MODEM_MODE_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : CPU_MON_Pin C_MOSI_Pin */
-  GPIO_InitStruct.Pin = CPU_MON_Pin|C_MOSI_Pin;
+  /*Configure GPIO pin : CPU_MON_Pin */
+  GPIO_InitStruct.Pin = CPU_MON_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(CPU_MON_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : C_INT_Pin */
   GPIO_InitStruct.Pin = C_INT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(C_INT_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : C_MOSI_Pin */
+  GPIO_InitStruct.Pin = C_MOSI_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(C_MOSI_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
@@ -376,9 +383,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   if (GPIO_Pin == C_INT_Pin) // 設定したピン番号に合わせて変更
   {
     // 割り込み発生時の処理（フラグ操作やLEDのトグルなど）
-    HAL_GPIO_WritePin(CPU_MON_GPIO_Port,CPU_MON_Pin,GPIO_PIN_SET);
+    //HAL_GPIO_WritePin(CPU_MON_GPIO_Port,CPU_MON_Pin,GPIO_PIN_SET);
     CMX869B_RCV_INT();
-    HAL_GPIO_WritePin(CPU_MON_GPIO_Port,CPU_MON_Pin,GPIO_PIN_RESET);
+    //HAL_GPIO_WritePin(CPU_MON_GPIO_Port,CPU_MON_Pin,GPIO_PIN_RESET);
   }
 }
 /* USER CODE END 4 */

@@ -59,14 +59,14 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define MCO_Pin GPIO_PIN_0
 #define MCO_GPIO_Port GPIOF
-#define C_CS_Pin GPIO_PIN_1
-#define C_CS_GPIO_Port GPIOF
+#define CPU_MON_Pin GPIO_PIN_1
+#define CPU_MON_GPIO_Port GPIOF
 #define VCP_TX_Pin GPIO_PIN_2
 #define VCP_TX_GPIO_Port GPIOA
-#define C_CLK_Pin GPIO_PIN_8
-#define C_CLK_GPIO_Port GPIOA
-#define C_MISO_Pin GPIO_PIN_11
-#define C_MISO_GPIO_Port GPIOA
+#define C_CS_Pin GPIO_PIN_8
+#define C_CS_GPIO_Port GPIOA
+#define C_INT_Pin GPIO_PIN_11
+#define C_INT_GPIO_Port GPIOA
 #define MODEM_MODE_Pin GPIO_PIN_12
 #define MODEM_MODE_GPIO_Port GPIOA
 #define SWDIO_Pin GPIO_PIN_13
@@ -75,11 +75,10 @@ void Error_Handler(void);
 #define SWCLK_GPIO_Port GPIOA
 #define VCP_RX_Pin GPIO_PIN_15
 #define VCP_RX_GPIO_Port GPIOA
-#define CPU_MON_Pin GPIO_PIN_3
-#define CPU_MON_GPIO_Port GPIOB
-#define C_INT_Pin GPIO_PIN_4
-#define C_INT_GPIO_Port GPIOB
-#define C_INT_EXTI_IRQn EXTI4_IRQn
+#define C_CLK_Pin GPIO_PIN_3
+#define C_CLK_GPIO_Port GPIOB
+#define C_MISO_Pin GPIO_PIN_4
+#define C_MISO_GPIO_Port GPIOB
 #define C_MOSI_Pin GPIO_PIN_5
 #define C_MOSI_GPIO_Port GPIOB
 

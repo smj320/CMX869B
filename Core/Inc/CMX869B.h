@@ -20,9 +20,9 @@ void CMX869B_Init(int is_gse);
 
 #define CMX_TX_BUFFER 10
 
-void CMX869B_read(uint8_t data[], int len);
+void CMX869B_read_data(uint8_t data[], int len);
 
-void CMX869B_write(uint8_t data[], int len);
+void CMX869B_write_data(uint8_t data[], int len);
 
 // 割込関数
 // mainのvoid HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)の中で

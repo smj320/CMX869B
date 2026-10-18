@@ -130,21 +130,13 @@ union {
 // 内部利用関数
 // ==========================================
 void set_bell(void);
-void set_v22_call(void);
-void set_v22_answer(void);
-void set_v22_loop(void);
 void set_qam_call(void);
 void set_qam_answer(void);
-int  get_qam_itm2(uint16_t mode);
 
-void cbus_write(uint8_t addr, uint16_t data);
-void cbus_read(uint8_t addr, uint16_t *data);
-
-#define CBUS_GRE_WRITE(x) cbus_write(GRE_ADDR, x);
-#define CBUS_DATA_WRITE(x) cbus_write(TxData_ADDR, x);
-#define CBUS_DATA_READ(x) cbus_read(RxData_ADDR, x);
-#define CBUS_ST_READ(x) cbus_read(StatusReg_ADDR, x);
-#define CBUS_QAM_ST_READ(x) cbus_read(QamStatusReg_ADDR, x);
+static void cbus_write_reg(uint8_t adr, uint16_t data);
+static uint16_t cbus_read_reg(uint8_t adr);
+static void cbus_write_data(uint8_t data);
+static uint8_t cbus_read_data();
 
 // ==========================================
 // グローバル変数
@@ -164,19 +156,19 @@ static int RxPtr = 0;
 //初期化
 void CMX869B_Init(int is_gse) {
     // グローバルリセット
-    cbus_write(General_Reset_ADDR, 0);
+    cbus_write_reg(General_Reset_ADDR, 0);
 
     //モード通知
     Is_gse = is_gse;
 
     // ステータス確認
-    CBUS_ST_READ(&StatusReg.Word);
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
 
     // Pwr=1,Rst=1で20ms以上保持して内部ロジックを確定させる(データシート GCR b8)
     // ここで水晶が発振する。
     GRE.Bits.Pwr = 1;
     GRE.Bits.Rst = 1;
-    CBUS_GRE_WRITE(GRE.Word);
+    cbus_write_reg(GRE_ADDR, GRE.Word);
     HAL_Delay(25);
 
     //send_cmdで、うまくいくと22pinが発振する
@@ -188,8 +180,8 @@ void CMX869B_Init(int is_gse) {
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
     GRE.Bits.IrqMask = 0b000000;
-    CBUS_GRE_WRITE(GRE.Word);
-    CBUS_ST_READ(&StatusReg.Word);
+    cbus_write_reg(GRE_ADDR, GRE.Word);
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
     HAL_Delay(1);
 
     // モデム送受信の設定
@@ -229,8 +221,8 @@ void CMX869B_Init(int is_gse) {
     //受信割込許可
     //GRE.Bits.IrqMask = 0b000001;
     GRE.Bits.IrqMask = 0b001001;
-    CBUS_GRE_WRITE(GRE.Word);
-    CBUS_ST_READ(&StatusReg.Word);
+    cbus_write_reg(GRE_ADDR, GRE.Word);
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
 
     //送信タイマ動作スタート
     //__HAL_TIM_SET_AUTORELOAD(&htim2, n_tim2);
@@ -240,13 +232,13 @@ void CMX869B_Init(int is_gse) {
 }
 
 // バッファライト
-void CMX869B_write(uint8_t *tx_data, int len) {
+void CMX869B_write_data(uint8_t *tx_data, int len) {
     memcpy(TX_buffer, tx_data, len);
     TxPtr = 1;
     //一文字書く
 }
 // バッファリード
-void CMX869B_read(uint8_t *rx_data, int len) {
+void CMX869B_read_data(uint8_t *rx_data, int len) {
     memcpy(rx_data, RX_buffer, len);
 }
 void CMX869B_read_reset(void) {
@@ -259,29 +251,29 @@ void CMX869B_RCV_INT(void) {
     static uint16_t rx_data = 0;
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
     //送信系データがないか確認
-    CBUS_ST_READ(&StatusReg.Word);
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
     if (StatusReg.Bits.RxDataReady == 1 || StatusReg.Bits.RxDataOverflow == 1) {
-        CBUS_DATA_READ(&rx_data);
+        rx_data = cbus_read_data();
         if (StatusReg.Bits.RxDataReady == 1) {
             xprintf("RX:%03d\r\n", rx_data);
         }
         //念のため割込フラグを戻す
-        CBUS_ST_READ(&StatusReg.Word);
+        StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
         HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
         return;
     }
 
     //割込処理中にデータ届いている農政もあるので、もう一回見に行く
-    CBUS_ST_READ(&StatusReg.Word);
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
     if (StatusReg.Bits.TxDataReady == 1 || StatusReg.Bits.TxDataUnderflow == 1) {
         if (StatusReg.Bits.TxDataReady == 1) {
             if (TxPtr < CMX_TX_BUFFER) {
                 xprintf("TX:%03d\r\n", TX_buffer[TxPtr]);
-                CBUS_DATA_WRITE(TX_buffer[TxPtr++]);
+                cbus_write_data(TX_buffer[TxPtr++]);
             }
         }
         //念のため割込フラグを戻す
-        CBUS_ST_READ(&StatusReg.Word);
+        StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
         HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
     }
 }
@@ -307,22 +299,10 @@ void cbus_write_reg(uint8_t adr, uint16_t data) {
     tx_data[2] = data&0xFF;
     cbux_transmit_receive(tx_data, rx_data, 3);
 }
-void cbux_reset() {
-     static uint8_t tx_data[1], rx_data[1];
-    tx_data[0] = 0x00;
-    cbux_transmit_receive(tx_data, rx_data, 1);
-}
-uint16_t cbus_read_status() {
-    static uint8_t tx_data[3], rx_data[3];
-    tx_data[0] = 0x00;
-    tx_data[1] = tx_data[2] = 0x0;
-    cbux_transmit_receive(tx_data, rx_data, 2);
-    return 0;
-}
 
-uint16_t cbus_read_status_qam() {
+uint16_t cbus_read_reg(uint8_t adr) {
     static uint8_t tx_data[3], rx_data[3];
-    tx_data[0] = 0x00;
+    tx_data[0] = adr;
     tx_data[1] = tx_data[2] = 0x0;
     cbux_transmit_receive(tx_data, rx_data, 2);
     return 0;
@@ -363,59 +343,13 @@ void set_bell(void) {
     TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    cbus_write(TxReg_ADDR, TxReg.Word);
+    cbus_write_reg(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_BELL;
     RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    cbus_write(RxReg_ADDR, RxReg.Word);
-}
-
-// 2400 bps 全二重
-void set_v22_call(void) {
-    // TX
-    TxReg.Bits.TxMode = TxReg_Mode_V22_CALL;
-    TxReg.Bits.TxLevel = TX_LEVEL;
-    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
-    TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    cbus_write(TxReg_ADDR, TxReg.Word);
-    // RX
-    RxReg.Bits.RxMode = RxReg_Mode_V22_CALL;
-    RxReg.Bits.RxLevel = RX_LEVEL;
-    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
-    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    cbus_write(RxReg_ADDR, RxReg.Word);
-}
-
-void set_v22_ans(void) {
-    // TX
-    TxReg.Bits.TxMode = TxReg_Mode_V22_ANS;
-    TxReg.Bits.TxLevel = TX_LEVEL;
-    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
-    TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    cbus_write(TxReg_ADDR, TxReg.Word);
-    // RX
-    RxReg.Bits.RxMode = RxReg_Mode_V22_ANS;
-    RxReg.Bits.RxLevel = RX_LEVEL;
-    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
-    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    cbus_write(RxReg_ADDR, RxReg.Word);
-}
-
-void set_v22_loop(void) {
-    // TX
-    TxReg.Bits.TxMode = TxReg_Mode_V22_ANS;
-    TxReg.Bits.TxLevel = TX_LEVEL;
-    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
-    TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    cbus_write(TxReg_ADDR, TxReg.Word);
-    // RX
-    RxReg.Bits.RxMode = RxReg_Mode_V22_CALL;
-    RxReg.Bits.RxLevel = RX_LEVEL;
-    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
-    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    cbus_write(RxReg_ADDR, RxReg.Word);
+    cbus_write_reg(RxReg_ADDR, RxReg.Word);
 }
 
 // AutoModem ネゴシエーション必須
@@ -425,18 +359,18 @@ void set_qam_answer(void) {
     TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    cbus_write(TxReg_ADDR, TxReg.Word);
+    cbus_write_reg(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    cbus_write(RxReg_ADDR, RxReg.Word);
+    cbus_write_reg(RxReg_ADDR, RxReg.Word);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
     QamReg.Bits.command = QamAnswer;
     QamReg.Bits.zeros = QamZeros;
-    cbus_write(QamCmdReg_ADDR, QamReg.Word);
+    cbus_write_reg(QamCmdReg_ADDR, QamReg.Word);
 }
 
 void set_qam_call(void) {
@@ -445,16 +379,16 @@ void set_qam_call(void) {
     TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    cbus_write(TxReg_ADDR, TxReg.Word);
+    cbus_write_reg(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    cbus_write(RxReg_ADDR, RxReg.Word);
+    cbus_write_reg(RxReg_ADDR, RxReg.Word);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
     QamReg.Bits.command = QamCall;
     QamReg.Bits.zeros = QamZeros;
-    cbus_write(QamCmdReg_ADDR, QamReg.Word);
+    cbus_write_reg(QamCmdReg_ADDR, QamReg.Word);
 }

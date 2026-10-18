@@ -22,11 +22,11 @@ void HKLoop(int is_gse) {
     for (;;) {
         // 送信
         for (int i=0;i<CMX_TX_BUFFER;i++) tx_data[i]=i;
-        CMX869B_write(tx_data,CMX_TX_BUFFER);
+        CMX869B_write_data(tx_data,CMX_TX_BUFFER);
         // 送信完了を待つ
         HAL_Delay(200);
         //　データ受け取り
-        CMX869B_read(rx_data,CMX_TX_BUFFER);
+        CMX869B_read_data(rx_data,CMX_TX_BUFFER);
         HAL_Delay(5000);
         nn++;
     }

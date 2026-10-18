@@ -106,15 +106,10 @@ int main(void)
   MX_TIM2_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-  //ジャンパークローズの場合はGSE
-  int mode_gse = 0;
-  if (GPIO_PIN_RESET == HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin)) {
-    mode_gse = 1;
-  }
+  //ジャンパークローズ(0)の場合はGSE
+  int  mode_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin)==0 ? 1 : 0;
   // xprintの実働関数の登録,uart_putcはCMX869B.cで定義
   xdev_out(uart_putc);
-  // モデム初期化
-  CMX869B_Init(mode_gse);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -397,10 +392,8 @@ static void MX_GPIO_Init(void)
 //************************
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  if (GPIO_Pin == C_INT_Pin) // 設定したピン番号に合わせて変更
-  {
-    CMX869B_RCV_INT();
-  }
+  // 設定したピン番号に合わせて変更
+  if (GPIO_Pin == C_INT_Pin) CMX869B_RCV_INT();
 }
 /* USER CODE END 4 */
 

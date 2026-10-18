@@ -148,25 +148,17 @@ void cbus_read(uint8_t addr, uint16_t *data);
 // ==========================================
 // グローバル変数
 // ==========================================
-#define N_TX_BUFFER 10
-
-uint8_t TX_buffer[N_TX_BUFFER];
-int TX_ptr = N_TX_BUFFER;
-int Is_gse = 0;
+uint8_t TX_buffer[CMX_TX_BUFFER];
+uint8_t RX_buffer[CMX_TX_BUFFER];
+static int TxPtr = CMX_TX_BUFFER;
+static int Is_gse = 0;
 
 //*==========================================
 // 公開関数
 //==========================================
+//初期化
 void CMX869B_Init(int is_gse) {
-
-    uint8_t tx_spi = 0x01;
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
-    HAL_SPI_Transmit(&hspi1, (uint8_t *)&tx_spi, 1, 100);
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
-
     // グローバルリセット
-    uint16_t rx_data;
-    int n_tim2 = 0;
     cbus_write(General_Reset_ADDR, 0);
 
     //モード通知
@@ -238,10 +230,19 @@ void CMX869B_Init(int is_gse) {
     //送信タイマ動作スタート
     //__HAL_TIM_SET_AUTORELOAD(&htim2, n_tim2);
     //HAL_TIM_Base_Start_IT(&htim2);
-    for (int i = 0; i < N_TX_BUFFER; i++) TX_buffer[i] = i;
+    for (int i = 0; i < CMX_TX_BUFFER; i++) TX_buffer[i] = i;
     xprintf("Initialized\r\n");
 }
 
+// バッファライト
+void CMX869B_write(uint8_t *tx_data, int len) {
+    memcpy(TX_buffer, tx_data, len);
+    TxPtr = 1;
+}
+// バッファリード
+void CMX869B_read(uint8_t *rx_data, int len) {
+    memcpy(rx_data, RX_buffer, len);
+}
 //************************
 // 受信割込
 //************************
@@ -265,9 +266,9 @@ void CMX869B_RCV_INT(void) {
     CBUS_ST_READ(&StatusReg.Word);
     if (StatusReg.Bits.TxDataReady == 1 || StatusReg.Bits.TxDataUnderflow == 1) {
         if (StatusReg.Bits.TxDataReady == 1) {
-            if (TX_ptr < N_TX_BUFFER) {
-                xprintf("TX:%03d\r\n", TX_buffer[TX_ptr]);
-                CBUS_DATA_WRITE(TX_buffer[TX_ptr++]);
+            if (TxPtr < CMX_TX_BUFFER) {
+                xprintf("TX:%03d\r\n", TX_buffer[TxPtr]);
+                CBUS_DATA_WRITE(TX_buffer[TxPtr++]);
             }
         }
         //念のため割込フラグを戻す
@@ -326,12 +327,9 @@ void cbus_read(uint8_t adr, uint16_t *data) {
 // xprintf用
 //************************
 void uart_putc(unsigned char c) {
-    // 送信データレジスタが空（TXE: Transmit Data Register Empty）になるのを待つ
-    while (!(USART2->ISR & USART_ISR_TXE)) {
-        // 必要に応じて無限ループ防止用のカウンターなどを追加
+    while (!(huart.Instance->ISR & USART_ISR_TXE)) {
     }
-    // 送信データレジスタに直接書き込む
-    USART2->TDR = c;
+    huart.Instance->TDR = c;
 }
 
 //************************

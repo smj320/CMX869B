@@ -16,20 +16,22 @@
 
 // Global Register
 #define GRE_ADDR 0xE0
+
 union {
-    uint16_t  Word;
+    uint16_t Word;
+
     struct {
-        uint16_t IrqMask : 6; //b0
-        uint16_t IrqEna : 1;
-        uint16_t Rst : 1;
-        uint16_t Pwr : 1;
-        uint16_t RlyDrv : 1;
-        uint16_t _2C : 1;
-        uint16_t LB : 1;
-        uint16_t  Zero : 1;
-        uint16_t  PatDet : 1;
-        uint16_t  HighGain : 1;
-        uint16_t  Equ : 1;
+        uint16_t IrqMask: 6; //b0
+        uint16_t IrqEna: 1;
+        uint16_t Rst: 1;
+        uint16_t Pwr: 1;
+        uint16_t RlyDrv: 1;
+        uint16_t _2C: 1;
+        uint16_t LB: 1;
+        uint16_t Zero: 1;
+        uint16_t PatDet: 1;
+        uint16_t HighGain: 1;
+        uint16_t Equ: 1;
     } __attribute__((packed)) Bits;
 } GRE = {0};
 
@@ -39,15 +41,17 @@ union {
 #define TxReg_Mode_V22_ANS 0b1011
 #define TxReg_Mode_V22_CALL 0b1010
 #define TxReg_Mode_BELL 0b0011
+
 union {
-    uint16_t  Word;
+    uint16_t Word;
+
     struct {
-        uint16_t DataBits : 3; //b0
-        uint16_t StartStop : 2;
-        uint16_t Scramble : 2;
-        uint16_t GardTone : 2;
-        uint16_t TxLevel : 3;
-        uint16_t TxMode : 4;
+        uint16_t DataBits: 3; //b0
+        uint16_t StartStop: 2;
+        uint16_t Scramble: 2;
+        uint16_t GardTone: 2;
+        uint16_t TxLevel: 3;
+        uint16_t TxMode: 4;
     } __attribute__((packed)) Bits;
 } TxReg = {0};
 
@@ -57,14 +61,15 @@ union {
 #define RxReg_Mode_V22_CALL 0b1011
 #define RxReg_Mode_V22_ANS 0b1010
 #define RxReg_Mode_BELL 0b0011
+
 union {
-    uint16_t  Word;
+    uint16_t Word;
     struct {
-        uint16_t BitsParity : 3; //b0
-        uint16_t StartStop_Synch : 3;
-        uint16_t Equaliser : 3;
-        uint16_t RxLevel : 3;
-        uint16_t RxMode : 4;
+        uint16_t BitsParity: 3; //b0
+        uint16_t StartStop_Synch: 3;
+        uint16_t Equaliser: 3;
+        uint16_t RxLevel: 3;
+        uint16_t RxMode: 4;
     } __attribute__((packed)) Bits;
 } RxReg = {0};
 
@@ -73,27 +78,27 @@ union {
 
 // Status Register
 #define StatusReg_ADDR 0xE6
-union {
-    uint16_t  Word;
-    struct {
-        uint16_t FSKDemodulatorOutput : 1; // b0
-        uint16_t Char2Mode : 1;            // b1
-        uint16_t Char2EvenHasParity : 1;   // b2
-        uint16_t Char2EvenParity : 1;      // b3
-        uint16_t FrameError : 1;           // b4
-        uint16_t RxDataOverflow : 1;       // b5　 MASK b00
-        uint16_t RxDataReady : 1;          // b6 　MASK b00
-        uint16_t b7_Unused : 1;            // b7
-        // MSB (b8-b15)
-        uint16_t b8_RightJustify : 1;      // b8
-        uint16_t b9_FrameSyncDetect : 1;   // b9
-        uint16_t EnergyDetect : 1;         // b10
-        uint16_t TxDataUnderflow : 1;       // b11　MASK b03
-        uint16_t TxDataReady : 1;          // b12　MASK b03
-        uint16_t ProgrammingFlag : 1;      // b13
-        uint16_t RingDetect : 1;           // b14
-        uint16_t IRQ : 1;                  // b15
 
+union {
+    uint16_t Word;
+
+    struct {
+        uint16_t FSKDemodulatorOutput: 1; // b0
+        uint16_t Char2Mode: 1; // b1
+        uint16_t Char2EvenHasParity: 1; // b2
+        uint16_t Char2EvenParity: 1; // b3
+        uint16_t FrameError: 1; // b4
+        uint16_t RxDataOverflow: 1; // b5　 MASK b00
+        uint16_t RxDataReady: 1; // b6 　MASK b00
+        uint16_t b7_Unused: 1; // b7
+        uint16_t b8_RightJustify: 1; // b8
+        uint16_t b9_FrameSyncDetect: 1; // b9
+        uint16_t EnergyDetect: 1; // b10
+        uint16_t TxDataUnderflow: 1; // b11　MASK b03
+        uint16_t TxDataReady: 1; // b12　MASK b03
+        uint16_t ProgrammingFlag: 1; // b13
+        uint16_t RingDetect: 1; // b14
+        uint16_t IRQ: 1; // b15
     } __attribute__((packed)) Bits;
 } StatusReg = {0};
 
@@ -105,24 +110,28 @@ union {
 #define QamCall 0b010
 #define QamAnswer 0b011
 #define QamZeros 0b0000000000
+
 union {
-    uint16_t  Word;
+    uint16_t Word;
+
     struct {
-        uint16_t br : 3;
-        uint16_t command : 3; //Calling/Answer
-        uint16_t zeros : 10;
-    }  __attribute__((packed)) Bits;
+        uint16_t br: 3;
+        uint16_t command: 3; //Calling/Answer
+        uint16_t zeros: 10;
+    } __attribute__((packed)) Bits;
 } QamReg = {0};
 
 // QAM Status Register
 #define QamStatusReg_ADDR 0xEB
+
 union {
-    uint16_t  Word;
+    uint16_t Word;
+
     struct {
-        uint16_t Mode : 4; //b0
-        uint16_t SNR : 3;
-        uint16_t Zeros : 3;
-        uint16_t Messages : 6;
+        uint16_t Mode: 4; //b0
+        uint16_t SNR: 3;
+        uint16_t Zeros: 3;
+        uint16_t Messages: 6;
     } __attribute__((packed)) Bits;
 } QamStatusReg = {0};
 
@@ -130,12 +139,17 @@ union {
 // 内部利用関数
 // ==========================================
 void set_bell(void);
+
 void set_qam_call(void);
+
 void set_qam_answer(void);
 
 static void cbus_write_reg(uint8_t adr, uint16_t data);
+
 static uint16_t cbus_read_reg(uint8_t adr);
+
 static void cbus_write_data(uint8_t data);
+
 static uint8_t cbus_read_data();
 
 // ==========================================
@@ -155,11 +169,14 @@ static int RxPtr = 0;
 //==========================================
 //初期化
 void CMX869B_Init(int is_gse) {
-    // グローバルリセット
-    cbus_write_reg(General_Reset_ADDR, 0);
-
     //モード通知
     Is_gse = is_gse;
+
+    // SPIイネーブル
+    __HAL_SPI_ENABLE(&hspi);
+
+    // グローバルリセット
+    cbus_write_reg(General_Reset_ADDR, 0);
 
     // ステータス確認
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
@@ -224,9 +241,6 @@ void CMX869B_Init(int is_gse) {
     cbus_write_reg(GRE_ADDR, GRE.Word);
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
 
-    //送信タイマ動作スタート
-    //__HAL_TIM_SET_AUTORELOAD(&htim2, n_tim2);
-    //HAL_TIM_Base_Start_IT(&htim2);
     for (int i = 0; i < CMX_TX_BUFFER; i++) TX_buffer[i] = i;
     xprintf("Initialized\r\n");
 }
@@ -237,13 +251,16 @@ void CMX869B_write_data(uint8_t *tx_data, int len) {
     TxPtr = 1;
     //一文字書く
 }
+
 // バッファリード
 void CMX869B_read_data(uint8_t *rx_data, int len) {
     memcpy(rx_data, RX_buffer, len);
 }
+
 void CMX869B_read_reset(void) {
     RxPtr = 0;
 }
+
 // ==========================================
 // 受信割込
 // ==========================================
@@ -282,21 +299,23 @@ void CMX869B_RCV_INT(void) {
 // C-BUS操作関数
 // ==========================================
 static void cbux_transmit_receive(const uint8_t tx_data[], uint8_t rx_data[], int len) {
-    C_CS_GPIO_Port->BSRR = C_CS_Pin;
+    C_CS_GPIO_Port->BSRR = (uint32_t) C_CS_Pin << 16;
     for (int i = 0; i < len; i++) {
-        *(volatile uint8_t*)&(hspi1.Instance->DR) = tx_data[i];
-        while (!(hspi1.Instance->SR & SPI_SR_TXE)){};
-        while (hspi1.Instance->SR & SPI_SR_BSY){};
-        rx_data[i] = *(volatile uint8_t*)&(hspi1.Instance->DR);
+        *(volatile uint8_t *) &(hspi.Instance->DR) = tx_data[i];
+        while (!(hspi.Instance->SR & SPI_SR_TXE)) {
+        };
+        while (hspi.Instance->SR & SPI_SR_BSY) {
+        };
+        rx_data[i] = *(volatile uint8_t *) &(hspi.Instance->DR);
     }
-    C_CS_GPIO_Port->BSRR = (uint32_t)C_CS_Pin << 16;
+    C_CS_GPIO_Port->BSRR = C_CS_Pin;
 }
 
 void cbus_write_reg(uint8_t adr, uint16_t data) {
     static uint8_t tx_data[3], rx_data[3];
     tx_data[0] = adr;
-    tx_data[1] = (data>>8);
-    tx_data[2] = data&0xFF;
+    tx_data[1] = (data >> 8) & 0xFF;
+    tx_data[2] = (data >> 0) & 0xFF;
     cbux_transmit_receive(tx_data, rx_data, 3);
 }
 
@@ -305,23 +324,25 @@ uint16_t cbus_read_reg(uint8_t adr) {
     tx_data[0] = adr;
     tx_data[1] = tx_data[2] = 0x0;
     cbux_transmit_receive(tx_data, rx_data, 2);
-    return 0;
+    uint16_t result =  (rx_data[1] << 8)  + rx_data[2];
+    return result;
 }
 
 void cbus_write_data(uint8_t data) {
     static uint8_t tx_data[3], rx_data[3];
-    tx_data[0] = 0x00;
-    tx_data[1] = tx_data[2] = 0x0;
+    tx_data[0] = TxData_ADDR;
+    tx_data[1] = tx_data[2] = data;
     cbux_transmit_receive(tx_data, rx_data, 2);
 }
 
 uint8_t cbus_read_data() {
     static uint8_t tx_data[2], rx_data[2];
-    tx_data[0] = 0x00;
+    tx_data[0] = RxData_ADDR;
     tx_data[1] = 0x0;
     cbux_transmit_receive(tx_data, rx_data, 2);
     return rx_data[1];
 }
+
 // ==========================================
 // xprintf用
 // ==========================================

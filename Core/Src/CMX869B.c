@@ -8,7 +8,6 @@
 #include "CMX869B.h"
 #include "xprintf.h"
 #include "SEGGER_RTT.h"
-#include "main.h"
 
 // ==========================================
 // レジスタとビットフィールド

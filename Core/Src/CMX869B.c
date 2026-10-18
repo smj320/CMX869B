@@ -152,6 +152,9 @@ static void cbus_write_data(uint8_t data);
 
 static uint8_t cbus_read_data();
 
+static void cbus_tx_int_enable(void);
+static void cbus_tx_int_disable(void);
+
 // ==========================================
 // グローバル変数
 // ==========================================
@@ -237,9 +240,12 @@ void CMX869B_Init(int is_gse) {
 #endif
     //受信割込許可
     //GRE.Bits.IrqMask = 0b000001;
-    GRE.Bits.IrqMask = 0b001001;
+    __disable_irq();
+    GRE.Bits.IrqMask = 0b000001;
     cbus_write_reg(GRE_ADDR, GRE.Word);
+    uint8_t rx_data = cbus_read_data();
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
+    __enable_irq();
 
     for (int i = 0; i < CMX_TX_BUFFER; i++) TX_buffer[i] = i;
     xprintf("Initialized\r\n");
@@ -247,18 +253,19 @@ void CMX869B_Init(int is_gse) {
 
 // バッファライト
 void CMX869B_write_data(uint8_t *tx_data, int len) {
-    memcpy(TX_buffer, tx_data, len);
-    TxPtr = 1;
-    //一文字書く
+    //memcpy(TX_buffer, tx_data, len);
+    //TxPtr = 1;
+    //cbus_tx_int_enable();
+    // ステータスを読むと受信フラグ/IRQが消えるのでISRに任せる
+    // ISRとSPIが競合しないよう、C-BUSアクセス中は割込を止める
+    HAL_NVIC_DisableIRQ(C_INT_EXTI_IRQn);
+    cbus_write_data(TX_buffer[0]);
+    HAL_NVIC_EnableIRQ(C_INT_EXTI_IRQn);
 }
 
 // バッファリード
 void CMX869B_read_data(uint8_t *rx_data, int len) {
     memcpy(rx_data, RX_buffer, len);
-}
-
-void CMX869B_read_reset(void) {
-    RxPtr = 0;
 }
 
 // ==========================================
@@ -279,7 +286,9 @@ void CMX869B_RCV_INT(void) {
         HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
         return;
     }
-
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
+    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+    /*
     //割込処理中にデータ届いている農政もあるので、もう一回見に行く
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
     if (StatusReg.Bits.TxDataReady == 1 || StatusReg.Bits.TxDataUnderflow == 1) {
@@ -287,12 +296,14 @@ void CMX869B_RCV_INT(void) {
             if (TxPtr < CMX_TX_BUFFER) {
                 xprintf("TX:%03d\r\n", TX_buffer[TxPtr]);
                 cbus_write_data(TX_buffer[TxPtr++]);
+            }else {
+                cbus_tx_int_disable();
             }
         }
         //念のため割込フラグを戻す
         StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
         HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
-    }
+    }*/
 }
 
 // ==========================================
@@ -323,7 +334,7 @@ uint16_t cbus_read_reg(uint8_t adr) {
     static uint8_t tx_data[3], rx_data[3];
     tx_data[0] = adr;
     tx_data[1] = tx_data[2] = 0x0;
-    cbux_transmit_receive(tx_data, rx_data, 2);
+    cbux_transmit_receive(tx_data, rx_data, 3);
     uint16_t result =  (rx_data[1] << 8)  + rx_data[2];
     return result;
 }
@@ -341,6 +352,16 @@ uint8_t cbus_read_data() {
     tx_data[1] = 0x0;
     cbux_transmit_receive(tx_data, rx_data, 2);
     return rx_data[1];
+}
+
+void cbus_tx_int_enable(void) {
+    GRE.Bits.IrqMask = 0b001001;
+    cbus_write_reg(GRE_ADDR, GRE.Word);
+}
+
+void cbus_tx_int_disable(void) {
+    GRE.Bits.IrqMask = 0b000001;
+    cbus_write_reg(GRE_ADDR, GRE.Word);
 }
 
 // ==========================================

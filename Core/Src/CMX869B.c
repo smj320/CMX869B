@@ -139,6 +139,7 @@ int  get_qam_itm2(uint16_t mode);
 
 void cbus_write(uint8_t addr, uint16_t data);
 void cbus_read(uint8_t addr, uint16_t *data);
+
 #define CBUS_GRE_WRITE(x) cbus_write(GRE_ADDR, x);
 #define CBUS_DATA_WRITE(x) cbus_write(TxData_ADDR, x);
 #define CBUS_DATA_READ(x) cbus_read(RxData_ADDR, x);
@@ -148,10 +149,14 @@ void cbus_read(uint8_t addr, uint16_t *data);
 // ==========================================
 // グローバル変数
 // ==========================================
+// 動作モード
+static int Is_gse = 0;
+
+// 送受信バッファ
 uint8_t TX_buffer[CMX_TX_BUFFER];
 uint8_t RX_buffer[CMX_TX_BUFFER];
 static int TxPtr = CMX_TX_BUFFER;
-static int Is_gse = 0;
+static int RxPtr = 0;
 
 //*==========================================
 // 公開関数
@@ -238,14 +243,18 @@ void CMX869B_Init(int is_gse) {
 void CMX869B_write(uint8_t *tx_data, int len) {
     memcpy(TX_buffer, tx_data, len);
     TxPtr = 1;
+    //一文字書く
 }
 // バッファリード
 void CMX869B_read(uint8_t *rx_data, int len) {
     memcpy(rx_data, RX_buffer, len);
 }
-//************************
+void CMX869B_read_reset(void) {
+    RxPtr = 0;
+}
+// ==========================================
 // 受信割込
-//************************
+// ==========================================
 void CMX869B_RCV_INT(void) {
     static uint16_t rx_data = 0;
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
@@ -277,64 +286,74 @@ void CMX869B_RCV_INT(void) {
     }
 }
 
-//******************************************************
+// ==========================================
 // C-BUS操作関数
-//******************************************************
-static void cbus_raw_write(uint16_t c, int n_bits) {
-    uint8_t bit;
-    for (int i = n_bits - 1; 0 <= i; i--) {
-        bit = (c >> (i)) & 0x01;
-        HAL_GPIO_WritePin(C_MOSI_GPIO_Port, C_MOSI_Pin, bit);
-        HAL_GPIO_WritePin(C_CLK_GPIO_Port, C_CLK_Pin, GPIO_PIN_SET);
-        HAL_GPIO_WritePin(C_CLK_GPIO_Port, C_CLK_Pin, GPIO_PIN_RESET);
+// ==========================================
+static void cbux_transmit_receive(const uint8_t tx_data[], uint8_t rx_data[], int len) {
+    C_CS_GPIO_Port->BSRR = C_CS_Pin;
+    for (int i = 0; i < len; i++) {
+        *(volatile uint8_t*)&(hspi1.Instance->DR) = tx_data[i];
+        while (!(hspi1.Instance->SR & SPI_SR_TXE)){};
+        while (hspi1.Instance->SR & SPI_SR_BSY){};
+        rx_data[i] = *(volatile uint8_t*)&(hspi1.Instance->DR);
     }
-    HAL_GPIO_WritePin(C_MOSI_GPIO_Port, C_MOSI_Pin, GPIO_PIN_RESET);
+    C_CS_GPIO_Port->BSRR = (uint32_t)C_CS_Pin << 16;
 }
 
-static void cbus_raw_read(uint16_t *c, int n_bits) {
-    int i;
-    uint16_t bit, cc;
-    for (i = n_bits - 1, cc = 0; 0 <= i; i--) {
-        HAL_GPIO_WritePin(C_CLK_GPIO_Port, C_CLK_Pin, GPIO_PIN_SET);
-        bit = HAL_GPIO_ReadPin(C_MISO_GPIO_Port, C_MISO_Pin);
-        //buf[i] = bit;
-        cc = cc + (bit << i);
-        HAL_GPIO_WritePin(C_CLK_GPIO_Port, C_CLK_Pin, GPIO_PIN_RESET);
-    }
-    *c = cc;
+void cbus_write_reg(uint8_t adr, uint16_t data) {
+    static uint8_t tx_data[3], rx_data[3];
+    tx_data[0] = adr;
+    tx_data[1] = (data>>8);
+    tx_data[2] = data&0xFF;
+    cbux_transmit_receive(tx_data, rx_data, 3);
+}
+void cbux_reset() {
+     static uint8_t tx_data[1], rx_data[1];
+    tx_data[0] = 0x00;
+    cbux_transmit_receive(tx_data, rx_data, 1);
+}
+uint16_t cbus_read_status() {
+    static uint8_t tx_data[3], rx_data[3];
+    tx_data[0] = 0x00;
+    tx_data[1] = tx_data[2] = 0x0;
+    cbux_transmit_receive(tx_data, rx_data, 2);
+    return 0;
 }
 
-// C-BUSの操作
-void cbus_write(uint8_t adr, uint16_t data) {
-    int n_bits = adr == TxData_ADDR ? 8 : 16;
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
-    cbus_raw_write(adr, 8);
-    if (adr != General_Reset_ADDR) {
-        cbus_raw_write(data, n_bits);
-    }
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
+uint16_t cbus_read_status_qam() {
+    static uint8_t tx_data[3], rx_data[3];
+    tx_data[0] = 0x00;
+    tx_data[1] = tx_data[2] = 0x0;
+    cbux_transmit_receive(tx_data, rx_data, 2);
+    return 0;
 }
 
-void cbus_read(uint8_t adr, uint16_t *data) {
-    int n_bits = adr == RxData_ADDR ? 8 : 16;
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
-    cbus_raw_write(adr, 8);
-    cbus_raw_read(data, n_bits);
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
+void cbus_write_data(uint8_t data) {
+    static uint8_t tx_data[3], rx_data[3];
+    tx_data[0] = 0x00;
+    tx_data[1] = tx_data[2] = 0x0;
+    cbux_transmit_receive(tx_data, rx_data, 2);
 }
 
-//************************
+uint8_t cbus_read_data() {
+    static uint8_t tx_data[2], rx_data[2];
+    tx_data[0] = 0x00;
+    tx_data[1] = 0x0;
+    cbux_transmit_receive(tx_data, rx_data, 2);
+    return rx_data[1];
+}
+// ==========================================
 // xprintf用
-//************************
+// ==========================================
 void uart_putc(unsigned char c) {
     while (!(huart.Instance->ISR & USART_ISR_TXE)) {
     }
     huart.Instance->TDR = c;
 }
 
-//************************
+// ==========================================
 // モデムモード
-//************************
+// ==========================================
 #define TX_LEVEL 0b111
 #define RX_LEVEL 0b111
 
@@ -354,7 +373,6 @@ void set_bell(void) {
 }
 
 // 2400 bps 全二重
-// ネゴシエーション不用なので、ブチ切りでもいける。
 void set_v22_call(void) {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_V22_CALL;
@@ -400,7 +418,7 @@ void set_v22_loop(void) {
     cbus_write(RxReg_ADDR, RxReg.Word);
 }
 
-// Auto modem
+// AutoModem ネゴシエーション必須
 void set_qam_answer(void) {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_QAM_AUTO;
@@ -439,35 +457,4 @@ void set_qam_call(void) {
     QamReg.Bits.command = QamCall;
     QamReg.Bits.zeros = QamZeros;
     cbus_write(QamCmdReg_ADDR, QamReg.Word);
-}
-
-int get_qam_itm2(uint16_t mode) {
-    int bps = 0;
-    int tim2 = 0;
-    switch (mode) {
-        case 0b1111: //14400
-            bps = 14400;
-            break;
-        case 0b1110: //12000
-            bps = 12000;
-            break;
-        case 0b1101: //9600
-        case 0b1100:
-            bps = (int)(9600*0.8);
-            break;
-        case 0b1011: //7200
-            bps = 7200;
-            break;
-        case 0b1010: //4800
-            bps = 4800;
-            break;
-        case 0b1001: //2400
-            bps = 2400;
-            break;
-        default:
-            bps = 1200;
-            break;
-    }
-    tim2 = 100*1200/bps-1;
-    return tim2;
 }

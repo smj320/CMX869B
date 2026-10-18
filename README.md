@@ -1,19 +1,5 @@
 # CMX869B
 
-## 割込関数の登録
-
-main.cの中の下記の場所に追記する。
-
-```aiignore
-*void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-  if (GPIO_Pin == C_INT_Pin) // 設定したピン番号に合わせて変更
-  {
-    CMX869B_RCV_INT();
-  }
-}
-```
-
 
 ## 割込の中でのSPI送信
 

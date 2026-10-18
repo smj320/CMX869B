@@ -23,7 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "xprintf.h"
 #include "CMX869B.h"
-#include "HK.h"
+#include "HKLoop.h"
 
 /* USER CODE END Includes */
 

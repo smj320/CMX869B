@@ -3,7 +3,7 @@
 //
 #include "string.h"
 #include "main.h"
-#include "HK.h"
+#include "HKLoop.h"
 #include "CMX869b.h"
 #include "xprintf.h"
 //
@@ -20,7 +20,12 @@ void HKLoop(int is_gse) {
 
     //Drillの場合はフレーム転送モード
     for (;;) {
+        // 送信
+        for (int i=0;i<CMX_TX_BUFFER;i++) tx_data[i]=i;
         CMX869B_write(tx_data,CMX_TX_BUFFER);
+        // 送信完了を待つ
+        HAL_Delay(200);
+        //　データ受け取り
         CMX869B_read(rx_data,CMX_TX_BUFFER);
         HAL_Delay(5000);
         nn++;

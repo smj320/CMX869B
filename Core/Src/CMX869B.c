@@ -180,6 +180,7 @@ static void cbus_tx_int_disable(void);
 // ==========================================
 // 動作モード
 static int Is_gse = 0;
+static int Is_loop_back = 1;
 
 // 送受信バッファ
 uint8_t TX_buffer[CMX_TX_BUFFER];
@@ -217,8 +218,7 @@ void CMX869B_Init(int is_gse) {
     //GRE.Bits.HighGain = 1;
     GRE.Bits.HighGain = 0;
     GRE.Bits.PatDet = 1;
-    //GRE.Bits.LB = 0;
-    GRE.Bits.LB = 1;
+    GRE.Bits.LB = Is_loop_back ==1 ? 1: 0;
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
     GRE.Bits.IrqMask = 0b000000;
@@ -227,39 +227,25 @@ void CMX869B_Init(int is_gse) {
     HAL_Delay(1);
 
     // モデム送受信の設定
-#define MD_CAL 1
-#define MD_LOOP 2
-    //#define MODE MD_CAL
-#define MODE MD_LOOP
-#if MODE == MD_CAL
-    set_bell();
-    while (1);
-#elif MODE == MD_LOOP
-    set_bell();
-    //set_v22_loop();
-#else
-    if (is_gse) {
-        set_qam_call();
-    } else {
-        set_qam_answer();
+    if (Is_loop_back==1) {
+        set_bell();
+    }else {
+        if (is_gse) {
+            set_qam_call();
+        } else {
+            set_qam_answer();
+        }
+        //ハンドシェーク監視
+        for (uint8_t tic = 0; tic < 240; tic++) {
+            QamStatusReg.Word = cbus_read_reg(QamStatusReg_ADDR);
+            xprintf("GSE:%d TI:%03d MSG:%02X SNR:%02X MODE:%02X\r\n",
+                    Is_gse,
+                    tic, QamStatusReg.Bits.Messages,
+                    QamStatusReg.Bits.SNR,
+                    QamStatusReg.Bits.Mode);
+            HAL_Delay(500);
+        }
     }
-    //ハンドシェーク監視
-    for (uint8_t tic = 0; tic < 240; tic++) {
-        CBUS_QAM_ST_READ(&QamStatusReg.Word);
-        HAL_GPIO_TogglePin(CPU_MON_GPIO_Port, CPU_MON_Pin);
-        xprintf("GSE:%d TI:%03d MSG:%02X SNR:%02X MODE:%02X\r\n",
-                Is_gse,
-                tic, QamStatusReg.Bits.Messages,
-                QamStatusReg.Bits.SNR,
-                QamStatusReg.Bits.Mode);
-        HAL_Delay(500);
-        tic++;
-    }
-
-    //ネゴシエーションの結果取得と送信タイマの設定
-    CBUS_QAM_ST_READ(&QamStatusReg.Word);
-    n_tim2 = get_qam_itm2(QamStatusReg.Bits.Mode);
-#endif
     //受信割込許可
     //GRE.Bits.IrqMask = 0b000001;
     __disable_irq();
@@ -315,13 +301,16 @@ void CMX869B_RCV_INT(void) {
                       + (StatusReg.Bits.TxDataReady << 2) + (StatusReg.Bits.TxDataUnderflow<<1)
                       + StatusReg.Bits.FCS;
         rtt_log_hex('I', 'M', msg);
-        // 受信
-        if (StatusReg.Bits.RxDataReady == 1 || StatusReg.Bits.RxDataOverflow == 1) {
+        // 受信はNxDataReadyであれば実効
+        if (StatusReg.Bits.RxDataReady == 1) {
             uint8_t rx_data = cbus_read_data();
-            if (StatusReg.Bits.RxDataReady == 1) {
-                if (StatusReg.Bits.FCS == 1 || RxPtr == CMX_RX_BUFFER) RxPtr=0;
-                RX_buffer[RxPtr++] = rx_data;
-                rtt_log_hex('R', 'X', rx_data);
+            //ただしオーバーフローのときは破棄
+            if (StatusReg.Bits.RxDataOverflow != 1) {
+                if (RxPtr < CMX_RX_BUFFER) {
+                    RX_buffer[RxPtr++] = rx_data;
+                    rtt_log_hex('R', 'X', rx_data);
+                }
+                if (StatusReg.Bits.FCS == 1) RxPtr=0;
             }
         }
         // 送信：TxDataReady のたびに次の1バイトを書き、無くなったら送信割込を止める

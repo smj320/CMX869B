@@ -166,7 +166,9 @@ static int Is_gse = 0;
 // 送受信バッファ
 uint8_t TX_buffer[CMX_TX_BUFFER];
 uint8_t RX_buffer[CMX_TX_BUFFER];
-static int TxPtr = CMX_TX_BUFFER;
+// ISR とメインで共有。TxPtr < TxLen の間は送信中
+static volatile int TxPtr = 0;
+static volatile int TxLen = 0;
 static int RxPtr = 0;
 
 //*==========================================
@@ -254,14 +256,18 @@ void CMX869B_Init(int is_gse) {
 }
 
 // バッファライト
+// 送信中に呼ぶと残りを破棄して新しいデータで送り直す
 void CMX869B_write_data(uint8_t tx_data[], int len) {
-    memcpy(TX_buffer, tx_data, len);
-    //TxPtr = 1;
-    //cbus_tx_int_enable();
-    // ステータスを読むと受信フラグ/IRQが消えるのでISRに任せる
-    // ISRとSPIが競合しないよう、C-BUSアクセス中は割込を止める
+    if (len > CMX_TX_BUFFER) len = CMX_TX_BUFFER;
+    // ISRとSPI・送信ポインタが競合しないよう、割込を止めて準備する
     HAL_NVIC_DisableIRQ(C_INT_EXTI_IRQn);
-    cbus_write_data(TX_buffer[0]);
+    memcpy(TX_buffer, tx_data, len);
+    TxPtr = 0;
+    TxLen = len;
+    cbus_tx_int_enable();
+    // 送信アイドル中は TxDataReady=1 のままで新たな IRQ は来ないので、
+    // ISR を直接呼んで1バイト目を書かせる（ステータスを読むので受信も同時に処理される）
+    CMX869B_RCV_INT();
     HAL_NVIC_EnableIRQ(C_INT_EXTI_IRQn);
 }
 
@@ -273,43 +279,43 @@ void CMX869B_read_data(uint8_t *rx_data, int len) {
 // ==========================================
 // 受信割込
 // ==========================================
+// 割込内なので printf を避け、"RX:xx" のように16進2桁に自前変換して書き込む
+// ※NoLock 版のため、チャネル0へ割込外から書く場合は SEGGER_RTT_Write に変えること
+static void rtt_log_hex(char c0, char c1, uint8_t v) {
+    static const char hex[] = "0123456789ABCDEF";
+    const char s[] = {c0, c1, ':', hex[(v >> 4) & 0xF], hex[v & 0xF], '\r', '\n'};
+    SEGGER_RTT_WriteNoLock(0, s, sizeof s);
+}
+
+// C_INT の EXTI 割込と CMX869B_write_data() から呼ばれる（受信・送信の両方を処理）
 void CMX869B_RCV_INT(void) {
-    static uint16_t rx_data = 0;
     CPU_MON_GPIO_Port->BSRR = (uint32_t) CPU_MON_Pin;
-    //送信系データがないか確認
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
-    if (StatusReg.Bits.RxDataReady == 1 || StatusReg.Bits.RxDataOverflow == 1) {
-        rx_data = cbus_read_data();
-        if (StatusReg.Bits.RxDataReady == 1) {
-            // 割込内なので printf を避け、16進2桁に自前変換して書き込む
-            // ※NoLock 版のため、チャネル0へ他の箇所から書く場合は SEGGER_RTT_Write に変えること
-            static const char hex[] = "0123456789ABCDEF";
-            const char s[] = { 'R', 'X', ':', hex[(rx_data >> 4) & 0xF], hex[rx_data & 0xF], '\r', '\n' };
-            SEGGER_RTT_WriteNoLock(0, s, sizeof s);
-        }
-        //念のため割込フラグを戻す
+    do {
+        // ステータスを読むと IRQ がクリアされる（読んだ値は必ず処理する）
         StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
-        CPU_MON_GPIO_Port->BSRR = (uint32_t) CPU_MON_Pin<<16;
-        return;
-    }
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
-    CPU_MON_GPIO_Port->BSRR = (uint32_t) CPU_MON_Pin<<16;
-    /*
-    //割込処理中にデータ届いている農政もあるので、もう一回見に行く
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
-    if (StatusReg.Bits.TxDataReady == 1 || StatusReg.Bits.TxDataUnderflow == 1) {
+        // 受信
+        if (StatusReg.Bits.RxDataReady == 1 || StatusReg.Bits.RxDataOverflow == 1) {
+            uint8_t rx_data = cbus_read_data();
+            if (StatusReg.Bits.RxDataReady == 1) {
+                rtt_log_hex('R', 'X', rx_data);
+            }
+        }
+        // 送信：TxDataReady のたびに次の1バイトを書き、無くなったら送信割込を止める
+        // （書かずに放置すると TxDataReady=1 のままで次の IRQ が来ない）
         if (StatusReg.Bits.TxDataReady == 1) {
-            if (TxPtr < CMX_TX_BUFFER) {
-                xprintf("TX:%03d\r\n", TX_buffer[TxPtr]);
-                cbus_write_data(TX_buffer[TxPtr++]);
-            }else {
+            if (TxPtr < TxLen) {
+                uint8_t tx_data = TX_buffer[TxPtr++];
+                cbus_write_data(tx_data);
+                rtt_log_hex('T', 'X', tx_data);
+            } else {
                 cbus_tx_int_disable();
             }
         }
-        //念のため割込フラグを戻す
-        StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
-        HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
-    }*/
+        // SPI アクセスで IRQN に乗ったグリッチによる保留を捨てる。
+        // クリア後にピンを確認するので、本物の IRQ（Low のまま）は取りこぼさない
+        __HAL_GPIO_EXTI_CLEAR_IT(C_INT_Pin);
+    } while (!(C_INT_GPIO_Port->IDR & C_INT_Pin));
+    CPU_MON_GPIO_Port->BSRR = (uint32_t) CPU_MON_Pin<<16;
 }
 
 // ==========================================

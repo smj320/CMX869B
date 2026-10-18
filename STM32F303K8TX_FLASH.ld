@@ -132,6 +132,16 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
+  /* SEGGER RTT control block and buffers, fixed at the start of RAM so the
+     address does not move between builds (see SEGGER_RTT_Conf.h).
+     NOLOAD: not cleared by startup; SEGGER_RTT_Init() initializes it. */
+  .rtt (NOLOAD) :
+  {
+    . = ALIGN(4);
+    KEEP(*(.rtt))
+    . = ALIGN(4);
+  } >RAM
+
   /* Used by the startup to initialize data */
   _sidata = LOADADDR(.data);
 

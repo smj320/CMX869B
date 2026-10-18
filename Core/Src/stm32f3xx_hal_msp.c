@@ -167,12 +167,19 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* hspi)
     PB4     ------> SPI1_MISO
     PB5     ------> SPI1_MOSI
     */
-    GPIO_InitStruct.Pin = C_CLK_Pin|C_MISO_Pin|C_MOSI_Pin;
+    GPIO_InitStruct.Pin = C_CLK_Pin|C_MOSI_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
     GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = C_MISO_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
+    HAL_GPIO_Init(C_MISO_GPIO_Port, &GPIO_InitStruct);
 
     /* USER CODE BEGIN SPI1_MspInit 1 */
 

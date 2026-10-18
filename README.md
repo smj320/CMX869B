@@ -1,5 +1,16 @@
 # CMX869B
 
+##  テンプレートファイル
+
+```aiignore
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/Core/*.*"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Drivers/*.*"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Middlewares/*.*"
+)
+```
+のようにすると、IDEが正しく認識してくれるようになる
+
 ## 割込に関するち注意
 
 デフォルトは立ち上がりなので、立ち下がりエッジに変更しておく。

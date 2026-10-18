@@ -3,10 +3,12 @@
 //
 
 #include "stm32f3xx_hal.h"
+#include "stm32f3xx_ll_spi.h"
 #include "CMX869B.h"
 #include <string.h>
 #include "main.h"
 #include "xprintf.h"
+#include "SEGGER_RTT.h"
 
 // ==========================================
 // レジスタとビットフィールド
@@ -252,8 +254,8 @@ void CMX869B_Init(int is_gse) {
 }
 
 // バッファライト
-void CMX869B_write_data(uint8_t *tx_data, int len) {
-    //memcpy(TX_buffer, tx_data, len);
+void CMX869B_write_data(uint8_t tx_data[], int len) {
+    memcpy(TX_buffer, tx_data, len);
     //TxPtr = 1;
     //cbus_tx_int_enable();
     // ステータスを読むと受信フラグ/IRQが消えるのでISRに任せる
@@ -273,21 +275,25 @@ void CMX869B_read_data(uint8_t *rx_data, int len) {
 // ==========================================
 void CMX869B_RCV_INT(void) {
     static uint16_t rx_data = 0;
-    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
+    CPU_MON_GPIO_Port->BSRR = (uint32_t) CPU_MON_Pin;
     //送信系データがないか確認
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
     if (StatusReg.Bits.RxDataReady == 1 || StatusReg.Bits.RxDataOverflow == 1) {
         rx_data = cbus_read_data();
         if (StatusReg.Bits.RxDataReady == 1) {
-            xprintf("RX:%03d\r\n", rx_data);
+            // 割込内なので printf を避け、16進2桁に自前変換して書き込む
+            // ※NoLock 版のため、チャネル0へ他の箇所から書く場合は SEGGER_RTT_Write に変えること
+            static const char hex[] = "0123456789ABCDEF";
+            const char s[] = { 'R', 'X', ':', hex[(rx_data >> 4) & 0xF], hex[rx_data & 0xF], '\r', '\n' };
+            SEGGER_RTT_WriteNoLock(0, s, sizeof s);
         }
         //念のため割込フラグを戻す
         StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
-        HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+        CPU_MON_GPIO_Port->BSRR = (uint32_t) CPU_MON_Pin<<16;
         return;
     }
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
-    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+    CPU_MON_GPIO_Port->BSRR = (uint32_t) CPU_MON_Pin<<16;
     /*
     //割込処理中にデータ届いている農政もあるので、もう一回見に行く
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
@@ -310,14 +316,19 @@ void CMX869B_RCV_INT(void) {
 // C-BUS操作関数
 // ==========================================
 static void cbux_transmit_receive(const uint8_t tx_data[], uint8_t rx_data[], int len) {
+    SPI_TypeDef *spi = hspi.Instance;
     C_CS_GPIO_Port->BSRR = (uint32_t) C_CS_Pin << 16;
     for (int i = 0; i < len; i++) {
-        *(volatile uint8_t *) &(hspi.Instance->DR) = tx_data[i];
-        while (!(hspi.Instance->SR & SPI_SR_TXE)) {
-        };
-        while (hspi.Instance->SR & SPI_SR_BSY) {
-        };
-        rx_data[i] = *(volatile uint8_t *) &(hspi.Instance->DR);
+        while (!LL_SPI_IsActiveFlag_TXE(spi)) {
+        }
+        LL_SPI_TransmitData8(spi, tx_data[i]);
+        // 全二重なので受信完了＝送信完了
+        while (!LL_SPI_IsActiveFlag_RXNE(spi)) {
+        }
+        rx_data[i] = LL_SPI_ReceiveData8(spi);
+    }
+    // CS を上げる前に最後のフレームの完了を待つ
+    while (LL_SPI_IsActiveFlag_BSY(spi)) {
     }
     C_CS_GPIO_Port->BSRR = C_CS_Pin;
 }

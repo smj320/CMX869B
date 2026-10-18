@@ -21,9 +21,10 @@ void HKLoop(int is_gse) {
     //Drillの場合はフレーム転送モード
     for (;;) {
         // 送信
-        xprintf("TX:%03d\r\n", nn++);
-        CMX869B_write_data(rx_data,CMX_TX_BUFFER);
-        HAL_Delay(100);
+        tx_data[0] = nn%10;
+        xprintf("TX:%03d\r\n", tx_data[0]);
+        CMX869B_write_data(tx_data,CMX_TX_BUFFER);
+        HAL_Delay(1000);
         nn++;
     }
 }

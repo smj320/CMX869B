@@ -56,7 +56,11 @@ include_directories(
 
 add_definitions(${defines})
 
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ${sources} "Middlewares/*.*")
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/Core/*.*"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Drivers/*.*"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Middlewares/*.*"
+)
 
 set(LINKER_SCRIPT $${CMAKE_SOURCE_DIR}/${linkerScript})
 

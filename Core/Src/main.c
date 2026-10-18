@@ -24,6 +24,7 @@
 #include "xprintf.h"
 #include "CMX869B.h"
 #include "HKLoop.h"
+#include "SEGGER_RTT.h"
 
 /* USER CODE END Includes */
 
@@ -110,6 +111,7 @@ int main(void)
   int  mode_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin)==0 ? 1 : 0;
   // xprintの実働関数の登録,uart_putcはCMX869B.cで定義
   xdev_out(uart_putc);
+  SEGGER_RTT_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */

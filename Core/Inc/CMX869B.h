@@ -19,6 +19,7 @@ extern SPI_HandleTypeDef hspi1;
 void CMX869B_Init(int is_gse);
 
 #define CMX_TX_BUFFER 10
+#define CMX_RX_BUFFER 10
 
 void CMX869B_read_data(uint8_t data[], int len);
 

@@ -17,14 +17,22 @@ void HKLoop(int is_gse) {
     int nn=0;
 
     CMX869B_Init(is_gse);
+    for (int i=0; i<CMX_RX_BUFFER; i++) {
+        tx_data[i] = i%10;
+    }
 
     //Drillの場合はフレーム転送モード
     for (;;) {
         // 送信
-        tx_data[0] = nn%10;
         xprintf("TX:%03d\r\n", tx_data[0]);
         CMX869B_write_data(tx_data,CMX_TX_BUFFER);
         HAL_Delay(1000);
+        CMX869B_read_data(rx_data,CMX_RX_BUFFER);
+        for (int i=0; i<CMX_RX_BUFFER; i++) {
+            xprintf("%02X ", rx_data[i]);
+        }
+        xprintf("\r\n");
+        HAL_Delay(5000);
         nn++;
     }
 }

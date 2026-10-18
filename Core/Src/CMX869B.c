@@ -13,10 +13,13 @@
 // ==========================================
 // レジスタとビットフィールド
 // ==========================================
+// --------------
 // General Reset
+// --------------
 #define General_Reset_ADDR 0x01
-
+// --------------
 // Global Register
+// --------------
 #define GRE_ADDR 0xE0
 
 union {
@@ -37,7 +40,9 @@ union {
     } __attribute__((packed)) Bits;
 } GRE = {0};
 
+// --------------
 // Tx Register
+// --------------
 #define TxReg_ADDR 0xE1
 #define TxReg_Mode_QAM_AUTO 0b1111
 #define TxReg_Mode_V22_ANS 0b1011
@@ -57,7 +62,9 @@ union {
     } __attribute__((packed)) Bits;
 } TxReg = {0};
 
+// --------------
 // Rx Register
+// --------------
 #define RxReg_ADDR 0xE2
 #define RxReg_Mode_QAM_AUTO 0b1111
 #define RxReg_Mode_V22_CALL 0b1011
@@ -66,6 +73,7 @@ union {
 
 union {
     uint16_t Word;
+
     struct {
         uint16_t BitsParity: 3; //b0
         uint16_t StartStop_Synch: 3;
@@ -75,10 +83,15 @@ union {
     } __attribute__((packed)) Bits;
 } RxReg = {0};
 
+// --------------
+// Data Registers
+// --------------
 #define TxData_ADDR 0xE4   //8bit
 #define RxData_ADDR 0xE5   //8bit
 
+// --------------
 // Status Register
+// --------------
 #define StatusReg_ADDR 0xE6
 
 union {
@@ -88,7 +101,7 @@ union {
         uint16_t FSKDemodulatorOutput: 1; // b0
         uint16_t Char2Mode: 1; // b1
         uint16_t Char2EvenHasParity: 1; // b2
-        uint16_t Char2EvenParity: 1; // b3
+        uint16_t FCS: 1; // b3
         uint16_t FrameError: 1; // b4
         uint16_t RxDataOverflow: 1; // b5　 MASK b00
         uint16_t RxDataReady: 1; // b6 　MASK b00
@@ -104,7 +117,9 @@ union {
     } __attribute__((packed)) Bits;
 } StatusReg = {0};
 
+// --------------
 // QAM Register
+// --------------
 #define QamCmdReg_ADDR 0xEA
 #define QamMaxBR_14400 0b111
 #define QamMaxBR_12000 0b110
@@ -123,7 +138,9 @@ union {
     } __attribute__((packed)) Bits;
 } QamReg = {0};
 
+// --------------
 // QAM Status Register
+// --------------
 #define QamStatusReg_ADDR 0xEB
 
 union {
@@ -155,6 +172,7 @@ static void cbus_write_data(uint8_t data);
 static uint8_t cbus_read_data();
 
 static void cbus_tx_int_enable(void);
+
 static void cbus_tx_int_disable(void);
 
 // ==========================================
@@ -293,10 +311,16 @@ void CMX869B_RCV_INT(void) {
     do {
         // ステータスを読むと IRQ がクリアされる（読んだ値は必ず処理する）
         StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
+        uint8_t msg = (StatusReg.Bits.RxDataReady << 4) + (StatusReg.Bits.RxDataOverflow << 3)
+                      + (StatusReg.Bits.TxDataReady << 2) + (StatusReg.Bits.TxDataUnderflow<<1)
+                      + StatusReg.Bits.FCS;
+        rtt_log_hex('I', 'M', msg);
         // 受信
         if (StatusReg.Bits.RxDataReady == 1 || StatusReg.Bits.RxDataOverflow == 1) {
             uint8_t rx_data = cbus_read_data();
             if (StatusReg.Bits.RxDataReady == 1) {
+                if (StatusReg.Bits.FCS == 1 || RxPtr == CMX_RX_BUFFER) RxPtr=0;
+                RX_buffer[RxPtr++] = rx_data;
                 rtt_log_hex('R', 'X', rx_data);
             }
         }
@@ -315,7 +339,7 @@ void CMX869B_RCV_INT(void) {
         // クリア後にピンを確認するので、本物の IRQ（Low のまま）は取りこぼさない
         __HAL_GPIO_EXTI_CLEAR_IT(C_INT_Pin);
     } while (!(C_INT_GPIO_Port->IDR & C_INT_Pin));
-    CPU_MON_GPIO_Port->BSRR = (uint32_t) CPU_MON_Pin<<16;
+    CPU_MON_GPIO_Port->BSRR = (uint32_t) CPU_MON_Pin << 16;
 }
 
 // ==========================================
@@ -352,7 +376,7 @@ uint16_t cbus_read_reg(uint8_t adr) {
     tx_data[0] = adr;
     tx_data[1] = tx_data[2] = 0x0;
     cbux_transmit_receive(tx_data, rx_data, 3);
-    uint16_t result =  (rx_data[1] << 8)  + rx_data[2];
+    uint16_t result = (rx_data[1] << 8) + rx_data[2];
     return result;
 }
 
@@ -400,14 +424,18 @@ void set_bell(void) {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_BELL;
     TxReg.Bits.TxLevel = TX_LEVEL;
-    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
-    TxReg.Bits.DataBits = 0b110; //8bit Stop1
+    //TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
+    //TxReg.Bits.DataBits = 0b110; //8bit Stop1
+    TxReg.Bits.StartStop = 0b11; //Special Mode
+    TxReg.Bits.DataBits = 0b110; //HDLC Mode
     cbus_write_reg(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_BELL;
     RxReg.Bits.RxLevel = RX_LEVEL;
-    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
-    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
+    //RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
+    //RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
+    RxReg.Bits.StartStop_Synch = 0b111; //Special Mode
+    RxReg.Bits.BitsParity = 0b110; //HDLC Mode
     cbus_write_reg(RxReg_ADDR, RxReg.Word);
 }
 

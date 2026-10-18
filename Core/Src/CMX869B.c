@@ -2,13 +2,13 @@
 // Created by kikuchi on 2026/01/12.
 //
 
+#include <string.h>
 #include "stm32f3xx_hal.h"
 #include "stm32f3xx_ll_spi.h"
 #include "CMX869B.h"
-#include <string.h>
-#include "main.h"
 #include "xprintf.h"
 #include "SEGGER_RTT.h"
+#include "main.h"
 
 // ==========================================
 // レジスタとビットフィールド

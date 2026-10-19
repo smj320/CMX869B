@@ -8,6 +8,26 @@ FreeOS+lwIPでソケットAPIをつかったり自動再送させるためのベ
 
 ## メモ
 
+
+### Txのシーケンス
+
+ループで筆頭送信した後のステータス。Txしていいのは11のときだけ。
+RxはRxRdy1で読んでよいが、Ovrが出ているときは次のデータは死んでいる。
+しかし現在のレジスタを読むことでとりあえずOverは消える。
+```aiignore
+05 TxRdy:0 TxUnd:0 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:0 RxRdy:0 RxOvr:0 <Int発生 書き込みはできない
+05 TxRdy:1 TxUnd:0 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:0 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:0 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:0 RxOvr:0 <Int発生　書き込みできる
+05 TxRdy:1 TxUnd:1 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:0 RxOvr:0
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0 <Int発生 書いても読んでもよい
+05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+```
+
+
 ### SEGGER_RTT.h
 
 SEGGER_RTT.hがSEGGER_RTT_ConfigDefault.hを読んで、

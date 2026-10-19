@@ -399,7 +399,7 @@ static void MX_GPIO_Init(void)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   // 設定したピン番号に合わせて変更
-  if (GPIO_Pin == C_INT_Pin) CMX869B_RCV_INT();
+  // if (GPIO_Pin == C_INT_Pin) CMX869B_RCV_INT();
 }
 /* USER CODE END 4 */
 

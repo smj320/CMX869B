@@ -15,20 +15,34 @@ extern SPI_HandleTypeDef hspi1;
 #define huart huart2
 #define hspi hspi1
 
+typedef union {
+    uint16_t Word;
+    struct {
+        uint16_t FSKDemodulatorOutput: 1; // b0
+        uint16_t Char2Mode: 1; // b1
+        uint16_t Char2EvenHasParity: 1; // b2
+        uint16_t FCS: 1; // b3
+        uint16_t FrameError: 1; // b4
+        uint16_t RxDataOverflow: 1; // b5　 MASK b00
+        uint16_t RxDataReady: 1; // b6 　MASK b00
+        uint16_t b7_Unused: 1; // b7
+        uint16_t b8_RightJustify: 1; // b8
+        uint16_t b9_FrameSyncDetect: 1; // b9
+        uint16_t EnergyDetect: 1; // b10
+        uint16_t TxDataUnderflow: 1; // b11　MASK b03
+        uint16_t TxDataReady: 1; // b12　MASK b03
+        uint16_t ProgrammingFlag: 1; // b13
+        uint16_t RingDetect: 1; // b14
+        uint16_t IRQ: 1; // b15
+    } __attribute__((packed)) Bits;
+} CMX869B_Status;
+
+
 // 外部公開用
 void CMX869B_Init(int is_gse);
-
-#define CMX_TX_BUFFER 10
-#define CMX_RX_BUFFER 10
-
-void CMX869B_read_data(uint8_t data[], int len);
-
-void CMX869B_write_data(uint8_t data[], int len);
-
-// 割込関数
-// mainのvoid HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)の中で
-// if (GPIO_Pin == C_INT_Pin) CMX869B_RCV_INT(); と登録
-void CMX869B_RCV_INT(void);
+void CMX869B_putc(char c);
+uint8_t CMX869B_getc();
+CMX869B_Status CMX869B_status(void);
 
 // xprintf用
 //mainの初期化のところで xdev_out(uart_putc); と登録

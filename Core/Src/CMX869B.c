@@ -92,29 +92,7 @@ union {
 // Status Register
 // --------------
 #define StatusReg_ADDR 0xE6
-
-union {
-    uint16_t Word;
-
-    struct {
-        uint16_t FSKDemodulatorOutput: 1; // b0
-        uint16_t Char2Mode: 1; // b1
-        uint16_t Char2EvenHasParity: 1; // b2
-        uint16_t FCS: 1; // b3
-        uint16_t FrameError: 1; // b4
-        uint16_t RxDataOverflow: 1; // b5　 MASK b00
-        uint16_t RxDataReady: 1; // b6 　MASK b00
-        uint16_t b7_Unused: 1; // b7
-        uint16_t b8_RightJustify: 1; // b8
-        uint16_t b9_FrameSyncDetect: 1; // b9
-        uint16_t EnergyDetect: 1; // b10
-        uint16_t TxDataUnderflow: 1; // b11　MASK b03
-        uint16_t TxDataReady: 1; // b12　MASK b03
-        uint16_t ProgrammingFlag: 1; // b13
-        uint16_t RingDetect: 1; // b14
-        uint16_t IRQ: 1; // b15
-    } __attribute__((packed)) Bits;
-} StatusReg = {0};
+CMX869B_Status StatusReg = {0};
 
 // --------------
 // QAM Register
@@ -123,6 +101,7 @@ union {
 #define QamMaxBR_14400 0b111
 #define QamMaxBR_12000 0b110
 #define QamMaxBR_9600 0b101
+#define QamMaxBR_2400 0b001
 #define QamCall 0b010
 #define QamAnswer 0b011
 #define QamZeros 0b0000000000
@@ -179,23 +158,18 @@ static void cbus_tx_int_disable(void);
 // ==========================================
 // 動作モード
 static int Is_gse = 0;
-static int Is_loop_back = 1;
-
-// 送受信バッファ
-uint8_t TX_buffer[CMX_TX_BUFFER];
-uint8_t RX_buffer[CMX_TX_BUFFER];
-// ISR とメインで共有。TxPtr < TxLen の間は送信中
-static volatile int TxPtr = 0;
-static volatile int TxLen = 0;
-static int RxPtr = 0;
 
 //*==========================================
 // 公開関数
 //==========================================
 //初期化
 void CMX869B_Init(int is_gse) {
+    static int is_loop_back = 0;
+    static int is_Cal = 0;
     //モード通知
     Is_gse = is_gse;
+    is_loop_back = 0;
+    is_Cal = 0;
 
     // SPIイネーブル
     __HAL_SPI_ENABLE(&hspi);
@@ -217,7 +191,7 @@ void CMX869B_Init(int is_gse) {
     //GRE.Bits.HighGain = 1;
     GRE.Bits.HighGain = 0;
     GRE.Bits.PatDet = 1;
-    GRE.Bits.LB = Is_loop_back ==1 ? 1: 0;
+    GRE.Bits.LB = is_loop_back ==1 ? 1: 0;
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
     GRE.Bits.IrqMask = 0b000000;
@@ -226,8 +200,11 @@ void CMX869B_Init(int is_gse) {
     HAL_Delay(1);
 
     // モデム送受信の設定
-    if (Is_loop_back==1) {
+    if (is_loop_back==1) {
         set_bell();
+        if (is_Cal==1) {
+            while (1);
+        }
     }else {
         if (is_gse) {
             set_qam_call();
@@ -235,7 +212,7 @@ void CMX869B_Init(int is_gse) {
             set_qam_answer();
         }
         //ハンドシェーク監視
-        for (uint8_t tic = 0; tic < 240; tic++) {
+        for (uint8_t tic = 0; tic < 120; tic++) {
             QamStatusReg.Word = cbus_read_reg(QamStatusReg_ADDR);
             xprintf("GSE:%d TI:%03d MSG:%02X SNR:%02X MODE:%02X\r\n",
                     Is_gse,
@@ -245,90 +222,21 @@ void CMX869B_Init(int is_gse) {
             HAL_Delay(500);
         }
     }
-    //受信割込許可
-    //GRE.Bits.IrqMask = 0b000001;
-    __disable_irq();
-    GRE.Bits.IrqMask = 0b000001;
-    cbus_write_reg(GRE_ADDR, GRE.Word);
-    uint8_t rx_data = cbus_read_data();
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
-    __enable_irq();
-
-    for (int i = 0; i < CMX_TX_BUFFER; i++) TX_buffer[i] = i;
     xprintf("Initialized\r\n");
 }
 
-// バッファライト
-// 送信中に呼ぶと残りを破棄して新しいデータで送り直す
-void CMX869B_write_data(uint8_t tx_data[], int len) {
-    if (len > CMX_TX_BUFFER) len = CMX_TX_BUFFER;
-    // ISRとSPI・送信ポインタが競合しないよう、割込を止めて準備する
-    HAL_NVIC_DisableIRQ(C_INT_EXTI_IRQn);
-    memcpy(TX_buffer, tx_data, len);
-    TxPtr = 0;
-    TxLen = len;
-    cbus_tx_int_enable();
-    // 送信アイドル中は TxDataReady=1 のままで新たな IRQ は来ないので、
-    // ISR を直接呼んで1バイト目を書かせる（ステータスを読むので受信も同時に処理される）
-    CMX869B_RCV_INT();
-    HAL_NVIC_EnableIRQ(C_INT_EXTI_IRQn);
+void CMX869B_putc(char c) {
+    cbus_write_data(c);
 }
-
-// バッファリード
-void CMX869B_read_data(uint8_t *rx_data, int len) {
-    memcpy(rx_data, RX_buffer, len);
+uint8_t CMX869B_getc() {
+    uint8_t c =    cbus_read_data();
+    return c;
 }
-
-// ==========================================
-// 受信割込
-// ==========================================
-// 割込内なので printf を避け、"RX:xx" のように16進2桁に自前変換して書き込む
-// ※NoLock 版のため、チャネル0へ割込外から書く場合は SEGGER_RTT_Write に変えること
-static void rtt_log_hex(char c0, char c1, uint8_t v) {
-    static const char hex[] = "0123456789ABCDEF";
-    const char s[] = {c0, c1, ':', hex[(v >> 4) & 0xF], hex[v & 0xF], '\r', '\n'};
-    SEGGER_RTT_WriteNoLock(0, s, sizeof s);
-}
-
-// C_INT の EXTI 割込と CMX869B_write_data() から呼ばれる（受信・送信の両方を処理）
-void CMX869B_RCV_INT(void) {
-    CPU_MON_GPIO_Port->BSRR = (uint32_t) CPU_MON_Pin;
-    do {
-        // ステータスを読むと IRQ がクリアされる（読んだ値は必ず処理する）
-        StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
-        uint8_t msg = (StatusReg.Bits.RxDataReady << 4) + (StatusReg.Bits.RxDataOverflow << 3)
-                      + (StatusReg.Bits.TxDataReady << 2) + (StatusReg.Bits.TxDataUnderflow<<1)
-                      + StatusReg.Bits.FCS;
-        rtt_log_hex('I', 'M', msg);
-        // 受信はNxDataReadyであれば実効
-        if (StatusReg.Bits.RxDataReady == 1) {
-            uint8_t rx_data = cbus_read_data();
-            //ただしオーバーフローのときは破棄
-            if (StatusReg.Bits.RxDataOverflow != 1) {
-                if (RxPtr < CMX_RX_BUFFER) {
-                    RX_buffer[RxPtr++] = rx_data;
-                    rtt_log_hex('R', 'X', rx_data);
-                }
-                if (StatusReg.Bits.FCS == 1) RxPtr=0;
-            }
-        }
-        // 送信：TxDataReady のたびに次の1バイトを書き、無くなったら送信割込を止める
-        // （書かずに放置すると TxDataReady=1 のままで次の IRQ が来ない）
-        if (StatusReg.Bits.TxDataReady == 1) {
-            if (TxPtr < TxLen) {
-                uint8_t tx_data = TX_buffer[TxPtr++];
-                cbus_write_data(tx_data);
-                rtt_log_hex('T', 'X', tx_data);
-            } else {
-                cbus_tx_int_disable();
-            }
-        }
-        // SPI アクセスで IRQN に乗ったグリッチによる保留を捨てる。
-        // クリア後にピンを確認するので、本物の IRQ（Low のまま）は取りこぼさない
-        __HAL_GPIO_EXTI_CLEAR_IT(C_INT_Pin);
-    } while (!(C_INT_GPIO_Port->IDR & C_INT_Pin));
-    CPU_MON_GPIO_Port->BSRR = (uint32_t) CPU_MON_Pin << 16;
-}
+CMX869B_Status CMX869B_status(void){
+    CMX869B_Status st;
+    st.Word = cbus_read_reg(StatusReg_ADDR );
+    return st;
+};
 
 // ==========================================
 // C-BUS操作関数
@@ -435,17 +343,21 @@ void set_qam_answer(void) {
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
     cbus_write_reg(TxReg_ADDR, TxReg.Word);
+    HAL_Delay(10);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
     cbus_write_reg(RxReg_ADDR, RxReg.Word);
+    HAL_Delay(10);
     //QAM
-    QamReg.Bits.br = QamMaxBR_14400;
+    //QamReg.Bits.br = QamMaxBR_14400;
+    QamReg.Bits.br = QamMaxBR_2400;
     QamReg.Bits.command = QamAnswer;
     QamReg.Bits.zeros = QamZeros;
     cbus_write_reg(QamCmdReg_ADDR, QamReg.Word);
+    HAL_Delay(10);
 }
 
 void set_qam_call(void) {
@@ -455,15 +367,19 @@ void set_qam_call(void) {
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
     cbus_write_reg(TxReg_ADDR, TxReg.Word);
+    HAL_Delay(10);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
     cbus_write_reg(RxReg_ADDR, RxReg.Word);
+    HAL_Delay(10);
     //QAM
-    QamReg.Bits.br = QamMaxBR_14400;
+    //QamReg.Bits.br = QamMaxBR_14400;
+    QamReg.Bits.br = QamMaxBR_2400;
     QamReg.Bits.command = QamCall;
     QamReg.Bits.zeros = QamZeros;
     cbus_write_reg(QamCmdReg_ADDR, QamReg.Word);
+    HAL_Delay(10);
 }

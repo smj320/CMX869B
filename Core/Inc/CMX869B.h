@@ -12,8 +12,10 @@
 // 割り当てによって適宜変更,ソースでは無番号を使う
 extern UART_HandleTypeDef huart2;
 extern SPI_HandleTypeDef hspi1;
+extern TIM_HandleTypeDef htim2;
 #define huart huart2
 #define hspi hspi1
+#define htim htim2
 
 typedef union {
     uint16_t Word;
@@ -43,6 +45,7 @@ void CMX869B_Init(int is_gse);
 void CMX869B_putc(char c);
 uint8_t CMX869B_getc();
 CMX869B_Status CMX869B_status(void);
+void CMX869b_poll();
 
 // xprintf用
 //mainの初期化のところで xdev_out(uart_putc); と登録

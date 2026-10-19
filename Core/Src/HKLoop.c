@@ -25,10 +25,7 @@ void HKLoop(int is_gse) {
         if (st.Bits.TxDataReady==1) {
             CMX869B_putc(nn%10);
         }
-        if (st.Bits.RxDataReady==1) {
-            c = CMX869B_getc();
-            xprintf("RCV: %d\r\n", c);
-        }
+
         HAL_Delay(1000);
         nn++;
     }

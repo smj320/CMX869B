@@ -191,7 +191,7 @@ void CMX869B_Init(int is_gse) {
     //GRE.Bits.HighGain = 1;
     GRE.Bits.HighGain = 0;
     GRE.Bits.PatDet = 1;
-    GRE.Bits.LB = is_loop_back ==1 ? 1: 0;
+    GRE.Bits.LB = is_loop_back == 1 ? 1 : 0;
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
     GRE.Bits.IrqMask = 0b000000;
@@ -200,12 +200,12 @@ void CMX869B_Init(int is_gse) {
     HAL_Delay(1);
 
     // モデム送受信の設定
-    if (is_loop_back==1) {
+    if (is_loop_back == 1) {
         set_bell();
-        if (is_Cal==1) {
+        if (is_Cal == 1) {
             while (1);
         }
-    }else {
+    } else {
         if (is_gse) {
             set_qam_call();
         } else {
@@ -222,21 +222,38 @@ void CMX869B_Init(int is_gse) {
             HAL_Delay(500);
         }
     }
+    //タイマ割込起動
+    HAL_TIM_Base_Start_IT(&htim);
     xprintf("Initialized\r\n");
+
 }
 
 void CMX869B_putc(char c) {
     cbus_write_data(c);
 }
+
 uint8_t CMX869B_getc() {
-    uint8_t c =    cbus_read_data();
+    uint8_t c = cbus_read_data();
     return c;
 }
-CMX869B_Status CMX869B_status(void){
+
+CMX869B_Status CMX869B_status(void) {
     CMX869B_Status st;
-    st.Word = cbus_read_reg(StatusReg_ADDR );
+    st.Word = cbus_read_reg(StatusReg_ADDR);
     return st;
 };
+
+//500usecで回す
+void CMX869b_poll() {
+    uint16_t c;
+    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
+    if (StatusReg.Bits.RxDataReady==1) {
+        c = CMX869B_getc();
+        xprintf("RCV: %d\r\n", c);
+    }
+    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+}
 
 // ==========================================
 // C-BUS操作関数
@@ -352,8 +369,8 @@ void set_qam_answer(void) {
     cbus_write_reg(RxReg_ADDR, RxReg.Word);
     HAL_Delay(10);
     //QAM
-    //QamReg.Bits.br = QamMaxBR_14400;
-    QamReg.Bits.br = QamMaxBR_2400;
+    QamReg.Bits.br = QamMaxBR_14400;
+    //QamReg.Bits.br = QamMaxBR_2400;
     QamReg.Bits.command = QamAnswer;
     QamReg.Bits.zeros = QamZeros;
     cbus_write_reg(QamCmdReg_ADDR, QamReg.Word);
@@ -376,8 +393,8 @@ void set_qam_call(void) {
     cbus_write_reg(RxReg_ADDR, RxReg.Word);
     HAL_Delay(10);
     //QAM
-    //QamReg.Bits.br = QamMaxBR_14400;
-    QamReg.Bits.br = QamMaxBR_2400;
+    QamReg.Bits.br = QamMaxBR_14400;
+    //QamReg.Bits.br = QamMaxBR_2400;
     QamReg.Bits.command = QamCall;
     QamReg.Bits.zeros = QamZeros;
     cbus_write_reg(QamCmdReg_ADDR, QamReg.Word);

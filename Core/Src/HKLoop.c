@@ -22,13 +22,12 @@ void HKLoop(int is_gse) {
     for (;;) {
         //
         CMX869B_putc(nn);
-        HAL_Delay(200);
+        HAL_Delay(250);
         uint8_t c = CMX869B_getc();
-        if (c != 0) {
-            int id = is_gse*100+nn%10;
-            xprintf("Received: %03d\r\n", id);
-        }
-        HAL_Delay(5000);
+        int id = is_gse*100+nn%10;
+        xprintf("%03d,", id);
+        if (nn%10==0) xprintf("\r\n");
+        HAL_Delay(500);
         nn++;
     }
 }

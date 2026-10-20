@@ -45,15 +45,16 @@ typedef union {
 //#define N_RXBuf 1700
 //#define N_TXBuf 80
 //#define N_RXBuf 80
-#define N_TXBuf 10
-#define N_RXBuf 10
+#define N_TXBuf 4
+#define N_RXBuf 4
 void CMX869B_Init(int is_gse);
 void CMX869B_putc(char c);
 uint8_t CMX869B_getc();
 CMX869B_Status CMX869B_status(void);
 void CMX869b_poll();
 void CMX869b_write(uint8_t data[], int len);
-void CMX869b_read(uint8_t data[], int len);
+int CMX869b_read(uint8_t data[], int len);
+int CMX869b_rx_errors(void);
 
 // xprintf用
 //mainの初期化のところで xdev_out(uart_putc); と登録

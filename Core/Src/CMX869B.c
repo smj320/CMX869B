@@ -231,6 +231,7 @@ void CMX869B_Init(int is_gse) {
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
     xprintf("Initialized\r\n");
 }
+
 //-----------------
 // ステータス確認、単発リードライト
 //-----------------
@@ -252,9 +253,16 @@ uint8_t CMX869B_getc() {
 //-----------------
 // バッファリードライト
 //-----------------
+// HDLC受信ではFCS(CRC-16)の2バイトもデータとして渡されるので、その分を余分に確保する
+#define N_FCS 2
 static int TxPtr = 0, RxPtr = 0;
 static uint8_t tx_buffer[N_TXBuf];
-static uint8_t rx_buffer[N_RXBuf];
+static uint8_t rx_buffer[N_RXBuf + N_FCS];
+// 受信完了フレーム(FCS除く)
+static uint8_t rx_frame[N_RXBuf];
+static volatile int RxFrameLen = 0;
+// 破棄したフレーム数(FCS不一致/オーバーフロー/バッファ超過)
+static volatile int RxErrCount = 0;
 
 void CMX869b_write(uint8_t data[], int len) {
     memcpy(tx_buffer, data, len);
@@ -262,29 +270,61 @@ void CMX869b_write(uint8_t data[], int len) {
     CMX869B_putc(tx_buffer[0]);
 }
 
-void CMX869b_read(uint8_t data[], int len) {
-    memcpy(data, rx_buffer, len);
-    RxPtr = 0;
+// 受信完了フレームをコピーしてデータ長を返す。未受信なら0
+int CMX869b_read(uint8_t data[], int len) {
+    __disable_irq();
+    int n = RxFrameLen < len ? RxFrameLen : len;
+    memcpy(data, rx_frame, n);
+    RxFrameLen = 0;
+    __enable_irq();
+    return n;
 }
 
-//500usecで回す
+int CMX869b_rx_errors(void) {
+    return RxErrCount;
+}
+
+// C_INT(IRQN)の立下り割込から呼ぶ
 void CMX869b_poll() {
     volatile static CMX869B_Status st;
+    static int rx_bad = 0;
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
-    st.Word = cbus_read_reg(StatusReg_ADDR);
-    if (st.Bits.RxDataReady == 1) {
-        uint8_t c= CMX869B_getc();
-        if (st.Bits.RxDataOverflow == 0)
-        if (RxPtr < N_RXBuf) {
-            rx_buffer[RxPtr++] = c;
-            xprintf("%d",st.Bits.FCS);
+    // 立下りエッジ割込なので、IRQNがHighに戻るまで処理しないと次の割込を取りこぼす
+    do {
+        st.Word = cbus_read_reg(StatusReg_ADDR);
+        if (st.Bits.RxDataReady == 1) {
+            uint8_t c = CMX869B_getc();
+            if (st.Bits.RxDataOverflow == 1) rx_bad = 1;
+            if (RxPtr < N_RXBuf + N_FCS) {
+                rx_buffer[RxPtr++] = c;
+            } else {
+                rx_bad = 1;
+            }
+            if (st.Bits.FCS == 1) {
+                // FCS一致=フレーム終端。末尾2バイトのFCSを除いて渡す
+                if (rx_bad == 0 && RxPtr > N_FCS) {
+                    RxFrameLen = RxPtr - N_FCS;
+                    memcpy(rx_frame, rx_buffer, RxFrameLen);
+                } else {
+                    RxErrCount++;
+                }
+                RxPtr = 0;
+                rx_bad = 0;
+            } else if (RxPtr >= N_RXBuf + N_FCS && rx_bad == 1) {
+                // FCSが一致しないまま溢れた。破棄して次のフレームに備える
+                RxErrCount++;
+                RxPtr = 0;
+                rx_bad = 0;
+            }
         }
-    }
-    if (st.Bits.TxDataReady == 1 && st.Bits.TxDataUnderflow == 1) {
-        if (TxPtr < N_TXBuf) {
-            CMX869B_putc(tx_buffer[TxPtr++]);
+        // HDLCではUnderflow=フレーム終了(FCS+閉じフラグ送出)なので、TxDataReadyだけで書き込む
+        // 書くデータが無ければアンダーフローしてCMX869BがFCSを自動付加する
+        if (st.Bits.TxDataReady == 1) {
+            if (TxPtr < N_TXBuf) {
+                CMX869B_putc(tx_buffer[TxPtr++]);
+            }
         }
-    }
+    } while (HAL_GPIO_ReadPin(C_INT_GPIO_Port, C_INT_Pin) == GPIO_PIN_RESET);
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
 }
 

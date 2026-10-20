@@ -21,17 +21,19 @@ void HKLoop(int is_gse) {
     //Drillの場合はフレーム転送モード
     for (;;) {
         //
-        memset(TxBuffer, nn%10, sizeof(TxBuffer));
+        for (int i=0; i<N_TXBuf; i++) {
+            TxBuffer[i] = 10*(nn%10)+i;
+        }
         CMX869b_write(TxBuffer, sizeof(TxBuffer));
         HAL_Delay(500);
         //
         memset(RxBuffer, 0, sizeof(RxBuffer));
-        CMX869b_read(RxBuffer, sizeof(RxBuffer));
-        HAL_Delay(500);
+        int n = CMX869b_read(RxBuffer, sizeof(RxBuffer));
+        HAL_Delay(5000);
         //
-        xprintf("\r\n");
-        for (int i=0; i<N_RXBuf; i++) {
-            xprintf("%02X ", RxBuffer[i]);
+        //xprintf("\r\nLEN:%d ERR:%d  ", n, CMX869b_rx_errors());
+        for (int i=0; i<n; i++) {
+            xprintf("%02d ", RxBuffer[i]);
         }
         xprintf("\r\n");
         nn++;

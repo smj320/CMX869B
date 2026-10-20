@@ -45,8 +45,8 @@ typedef union {
 //#define N_RXBuf 1700
 //#define N_TXBuf 80
 //#define N_RXBuf 80
-#define N_TXBuf 4
-#define N_RXBuf 4
+#define N_TXBuf 80
+#define N_RXBuf 80
 void CMX869B_Init(int is_gse);
 void CMX869B_putc(char c);
 uint8_t CMX869B_getc();

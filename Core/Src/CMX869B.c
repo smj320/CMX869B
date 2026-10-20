@@ -170,7 +170,7 @@ void CMX869B_Init(int is_gse) {
     static int is_Cal = 0;
     //モード通知
     Is_gse = is_gse;
-    is_loop_back = 1;
+    is_loop_back = 0;
     is_Cal = 0;
 
     // SPIイネーブル
@@ -226,8 +226,8 @@ void CMX869B_Init(int is_gse) {
     }
     //タイマ割込起動
     //HAL_TIM_Base_Start_IT(&htim);
-    GRE.Bits.IrqMask = 0b001001;
-    cbus_write_reg(GRE_ADDR, GRE.Word);
+    //GRE.Bits.IrqMask = 0b001001;
+    //cbus_write_reg(GRE_ADDR, GRE.Word);
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
     xprintf("Initialized\r\n");
 }

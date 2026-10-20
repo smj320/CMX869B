@@ -25,9 +25,11 @@ void HKLoop(int is_gse) {
         CMX869b_write(TxBuffer, sizeof(TxBuffer));
         HAL_Delay(500);
         //
+        memset(RxBuffer, 0, sizeof(RxBuffer));
         CMX869b_read(RxBuffer, sizeof(RxBuffer));
         HAL_Delay(500);
         //
+        xprintf("\r\n");
         for (int i=0; i<N_RXBuf; i++) {
             xprintf("%02X ", RxBuffer[i]);
         }

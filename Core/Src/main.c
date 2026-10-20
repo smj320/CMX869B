@@ -375,7 +375,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : C_INT_Pin */
   GPIO_InitStruct.Pin = C_INT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(C_INT_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : MODEM_MODE_Pin */
@@ -399,7 +399,7 @@ static void MX_GPIO_Init(void)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   // 設定したピン番号に合わせて変更
-  // if (GPIO_Pin == C_INT_Pin) CMX869B_RCV_INT();
+  if (GPIO_Pin == C_INT_Pin) CMX869b_poll();
 }
 /* USER CODE END 4 */
 

@@ -162,13 +162,15 @@ static int Is_gse = 0;
 //*==========================================
 // 公開関数
 //==========================================
+//-----------------
 //初期化
+//-----------------
 void CMX869B_Init(int is_gse) {
-    static int is_loop_back = 0;
+    static int is_loop_back = 1;
     static int is_Cal = 0;
     //モード通知
     Is_gse = is_gse;
-    is_loop_back = 0;
+    is_loop_back = 1;
     is_Cal = 0;
 
     // SPIイネーブル
@@ -223,9 +225,20 @@ void CMX869B_Init(int is_gse) {
         }
     }
     //タイマ割込起動
-    HAL_TIM_Base_Start_IT(&htim);
+    //HAL_TIM_Base_Start_IT(&htim);
+    GRE.Bits.IrqMask = 0b001001;
+    cbus_write_reg(GRE_ADDR, GRE.Word);
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
     xprintf("Initialized\r\n");
 }
+//-----------------
+// ステータス確認、単発リードライト
+//-----------------
+CMX869B_Status CMX869B_status(void) {
+    CMX869B_Status st;
+    st.Word = cbus_read_reg(StatusReg_ADDR);
+    return st;
+};
 
 void CMX869B_putc(char c) {
     cbus_write_data(c);
@@ -236,36 +249,38 @@ uint8_t CMX869B_getc() {
     return c;
 }
 
-CMX869B_Status CMX869B_status(void) {
-    CMX869B_Status st;
-    st.Word = cbus_read_reg(StatusReg_ADDR);
-    return st;
-};
-
-static uint8_t TxPtr = 0, RxPtr = 0;
+//-----------------
+// バッファリードライト
+//-----------------
+static int TxPtr = 0, RxPtr = 0;
 static uint8_t tx_buffer[N_TXBuf];
 static uint8_t rx_buffer[N_RXBuf];
 
 void CMX869b_write(uint8_t data[], int len) {
     memcpy(tx_buffer, data, len);
-    TxPtr = 0;
+    TxPtr = 1;
+    CMX869B_putc(tx_buffer[0]);
 }
 
 void CMX869b_read(uint8_t data[], int len) {
-    memcpy(data, tx_buffer, len);
+    memcpy(data, rx_buffer, len);
     RxPtr = 0;
 }
 
 //500usecで回す
 void CMX869b_poll() {
+    volatile static CMX869B_Status st;
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
-    if (StatusReg.Bits.RxDataReady == 1) {
+    st.Word = cbus_read_reg(StatusReg_ADDR);
+    if (st.Bits.RxDataReady == 1) {
+        uint8_t c= CMX869B_getc();
+        if (st.Bits.RxDataOverflow == 0)
         if (RxPtr < N_RXBuf) {
-            rx_buffer[RxPtr++] = CMX869B_getc();
+            rx_buffer[RxPtr++] = c;
+            xprintf("%d",st.Bits.FCS);
         }
     }
-    if (StatusReg.Bits.TxDataReady == 1 && StatusReg.Bits.TxDataUnderflow == 1) {
+    if (st.Bits.TxDataReady == 1 && st.Bits.TxDataUnderflow == 1) {
         if (TxPtr < N_TXBuf) {
             CMX869B_putc(tx_buffer[TxPtr++]);
         }
@@ -278,6 +293,9 @@ void CMX869b_poll() {
 // ==========================================
 static void cbux_transmit_receive(const uint8_t tx_data[], uint8_t rx_data[], int len) {
     SPI_TypeDef *spi = hspi.Instance;
+    //これをしておかないと、CSが上がる前にINTに飛んでしまう。
+    //__disable_irq()の場合はミュート中に割込があっても戻したときに記憶していて飛ぶ。
+    __disable_irq();
     C_CS_GPIO_Port->BSRR = (uint32_t) C_CS_Pin << 16;
     for (int i = 0; i < len; i++) {
         while (!LL_SPI_IsActiveFlag_TXE(spi)) {
@@ -292,6 +310,7 @@ static void cbux_transmit_receive(const uint8_t tx_data[], uint8_t rx_data[], in
     while (LL_SPI_IsActiveFlag_BSY(spi)) {
     }
     C_CS_GPIO_Port->BSRR = C_CS_Pin;
+    __enable_irq();
 }
 
 void cbus_write_reg(uint8_t adr, uint16_t data) {

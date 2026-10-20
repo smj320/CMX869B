@@ -41,6 +41,10 @@ typedef union {
 
 
 // 外部公開用
+//#define N_TXBuf 1700
+//#define N_RXBuf 1700
+//#define N_TXBuf 80
+//#define N_RXBuf 80
 #define N_TXBuf 10
 #define N_RXBuf 10
 void CMX869B_Init(int is_gse);

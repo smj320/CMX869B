@@ -23,10 +23,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "xprintf.h"
-#include "CMX869B.h"
-#include "HKLoop.h"
-#include "SEGGER_RTT.h"
 #include "TaskCMX86B.h"
+#include "TaskHK.h"
 #include "TaskHK.h"
 
 /* USER CODE END Includes */
@@ -138,11 +136,8 @@ int main(void)
   MX_TIM2_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-  //ジャンパークローズ(0)の場合はGSE
-  int  mode_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin)==0 ? 1 : 0;
   // xprintの実働関数の登録,uart_putcはCMX869B.cで定義
   xdev_out(uart_putc);
-  SEGGER_RTT_Init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -186,7 +181,6 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-    HKLoop(mode_gse);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -469,7 +463,7 @@ static void MX_GPIO_Init(void)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   // 設定したピン番号に合わせて変更
-  if (GPIO_Pin == C_INT_Pin) CMX869B_poll();
+  //if (GPIO_Pin == C_INT_Pin) CMX869B_poll();
 }
 /* USER CODE END 4 */
 
@@ -505,6 +499,7 @@ void StartTaskCMX869B(void *argument)
   /* Infinite loop */
   for(;;)
   {
+    TaskCMX86BEntry(argument);
     osDelay(1);
   }
   /* USER CODE END StartTaskCMX869B */
@@ -530,7 +525,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 1 */
   if (htim->Instance == TIM2)
   {
-    CMX869B_poll();
+    //CMX869B_poll();
   }
   /* USER CODE END Callback 1 */
 }

@@ -21,13 +21,8 @@ void HKLoop(int is_gse) {
     //Drillの場合はフレーム転送モード
     for (;;) {
         //
-        CMX869B_putc(nn);
-        HAL_Delay(250);
-        uint8_t c = CMX869B_getc();
-        int id = is_gse*100+nn%10;
-        xprintf("%03d,", id);
-        if (nn%10==0) xprintf("\r\n");
-        HAL_Delay(500);
+        CMX869B_poll();
+        HAL_Delay(5000);
         nn++;
     }
 }

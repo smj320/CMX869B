@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -25,10 +26,13 @@
 #include "CMX869B.h"
 #include "HKLoop.h"
 #include "SEGGER_RTT.h"
+#include "TaskCMX86B.h"
+#include "TaskHK.h"
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
+typedef StaticTask_t osStaticThreadDef_t;
 /* USER CODE BEGIN PTD */
 
 /* USER CODE END PTD */
@@ -52,6 +56,30 @@ TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart2;
 
+/* Definitions for TaskHK */
+osThreadId_t TaskHKHandle;
+uint32_t TaskHKBuffer[ 128 ];
+osStaticThreadDef_t TaskHKControlBlock;
+const osThreadAttr_t TaskHK_attributes = {
+  .name = "TaskHK",
+  .cb_mem = &TaskHKControlBlock,
+  .cb_size = sizeof(TaskHKControlBlock),
+  .stack_mem = &TaskHKBuffer[0],
+  .stack_size = sizeof(TaskHKBuffer),
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for TaskCMX869B */
+osThreadId_t TaskCMX869BHandle;
+uint32_t TaskCMX869BBuffer[ 128 ];
+osStaticThreadDef_t TaskCMX869BControlBlock;
+const osThreadAttr_t TaskCMX869B_attributes = {
+  .name = "TaskCMX869B",
+  .cb_mem = &TaskCMX869BControlBlock,
+  .cb_size = sizeof(TaskCMX869BControlBlock),
+  .stack_mem = &TaskCMX869BBuffer[0],
+  .stack_size = sizeof(TaskCMX869BBuffer),
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* USER CODE BEGIN PV */
 /* USER CODE END PV */
 
@@ -62,6 +90,9 @@ static void MX_I2C1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_SPI1_Init(void);
+void StartTaskHK(void *argument);
+void StartTaskCMX869B(void *argument);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -113,6 +144,45 @@ int main(void)
   xdev_out(uart_putc);
   SEGGER_RTT_Init();
   /* USER CODE END 2 */
+
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* creation of TaskHK */
+  TaskHKHandle = osThreadNew(StartTaskHK, NULL, &TaskHK_attributes);
+
+  /* creation of TaskCMX869B */
+  TaskCMX869BHandle = osThreadNew(StartTaskCMX869B, NULL, &TaskCMX869B_attributes);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* USER CODE BEGIN RTOS_EVENTS */
+  /* add events, ... */
+  /* USER CODE END RTOS_EVENTS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -385,7 +455,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(MODEM_MODE_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
@@ -399,9 +469,46 @@ static void MX_GPIO_Init(void)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   // 設定したピン番号に合わせて変更
-  if (GPIO_Pin == C_INT_Pin) CMX869b_poll();
+  if (GPIO_Pin == C_INT_Pin) CMX869B_poll();
 }
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartTaskHK */
+/**
+  * @brief  Function implementing the TaskHK thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartTaskHK */
+void StartTaskHK(void *argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+    TaskHKEntry(argument);
+    osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartTaskCMX869B */
+/**
+* @brief Function implementing the TaskCMX869B thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTaskCMX869B */
+void StartTaskCMX869B(void *argument)
+{
+  /* USER CODE BEGIN StartTaskCMX869B */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartTaskCMX869B */
+}
 
 /**
   * @brief  Period elapsed callback in non blocking mode
@@ -423,7 +530,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 1 */
   if (htim->Instance == TIM2)
   {
-    CMX869b_poll();
+    CMX869B_poll();
   }
   /* USER CODE END Callback 1 */
 }

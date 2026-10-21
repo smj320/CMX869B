@@ -1,10 +1,23 @@
 # CMX869B
 
+
 ベアメタル版。
 
 メインルーチンからAPIでバッファのデータを書き込むと、割込でHDLCフレーム送信。
 受信データはHDLCのFCSフラグを見てバッファに溜めて、メインルーチンからAPIで引き抜く。
 FreeOS+lwIPでソケットAPIをつかったり自動再送させるためのベース。
+
+## 重要事項
+FreeRTOSをいれた場合、Cmakefileにリンカスクリプトを明示しないとエラーになる
+```aiignore
+# project settings
+project(CMX869B C CXX ASM)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_STANDARD 11)
+
+# 以下を追加
+set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32F303xx_FLASH.ld")
+```
 
 ## メモ
 

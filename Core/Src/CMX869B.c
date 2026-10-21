@@ -283,12 +283,48 @@ int CMX869b_read(uint8_t data[], int len) {
 int CMX869b_rx_errors(void) {
     return RxErrCount;
 }
-
+// 割込要因のロギング
+static int cnt = 0;
+void rtt_log(CMX869B_Status st, uint8_t reason) {
+    char msg[] = {
+        'X',':',
+        ' ','N','0',':',
+        ' ','R','X','D',':',
+        '0'+st.Bits.RxDataReady,
+        ' ','R','X','O',':',
+        '0'+st.Bits.RxDataOverflow,
+        ' ','T','X','O',':',
+        '0'+st.Bits.TxDataReady,
+        ' ','T','X','U',':',
+        '0'+st.Bits.TxDataUnderflow,
+        '\r','\n'
+    };
+    msg[0] = reason;
+    msg[4] = '0'+cnt++%10;
+    SEGGER_RTT_WriteNoLock(0, msg, sizeof(msg));
+}
 // C_INT(IRQN)の立下り割込から呼ぶ
-void CMX869b_poll() {
+void CMX869B_poll() {
     volatile static CMX869B_Status st;
     static int rx_bad = 0;
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
+    st.Word = cbus_read_reg(StatusReg_ADDR);
+    if (st.Bits.RxDataReady == 1 || st.Bits.RxDataOverflow == 1) {
+        uint8_t c =CMX869B_getc();
+        rtt_log(st,'R');
+    }
+    else if (st.Bits.TxDataReady == 1 || st.Bits.TxDataUnderflow == 1) {
+        if (TxPtr<N_TXBuf) {
+            CMX869B_putc(TxPtr);
+            rtt_log(st,'T');
+            TxPtr++;
+        }
+    }else {
+        rtt_log(st,'Z');
+    }
+    st.Word = cbus_read_reg(StatusReg_ADDR);
+    rtt_log(st,'E');
+    /*
     // 立下りエッジ割込なので、IRQNがHighに戻るまで処理しないと次の割込を取りこぼす
     do {
         st.Word = cbus_read_reg(StatusReg_ADDR);
@@ -325,6 +361,7 @@ void CMX869b_poll() {
             }
         }
     } while (HAL_GPIO_ReadPin(C_INT_GPIO_Port, C_INT_Pin) == GPIO_PIN_RESET);
+    */
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
 }
 

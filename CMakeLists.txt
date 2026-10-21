@@ -18,6 +18,8 @@ project(CMX869B C CXX ASM)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 11)
 
+set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32F303xx_FLASH.ld")
+
 #Uncomment for hardware floating point
 add_compile_definitions(ARM_MATH_CM4;ARM_MATH_MATRIX_CHECK;ARM_MATH_ROUNDING)
 add_compile_options(-mfloat-abi=hard -mfpu=fpv4-sp-d16)
@@ -62,8 +64,6 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/Drivers/*.*"
         "${CMAKE_CURRENT_SOURCE_DIR}/Middlewares/*.*"
 )
-
-set(LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/STM32F303K8TX_FLASH.ld)
 
 add_link_options(-Wl,-gc-sections,--print-memory-usage,-Map=${PROJECT_BINARY_DIR}/${PROJECT_NAME}.map)
 add_link_options(-mcpu=cortex-m4 -mthumb -mthumb-interwork)

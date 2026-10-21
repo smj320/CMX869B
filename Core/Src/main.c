@@ -22,9 +22,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "task.h"
 #include "xprintf.h"
 #include "TaskCMX86B.h"
-#include "TaskHK.h"
 #include "TaskHK.h"
 
 /* USER CODE END Includes */
@@ -37,7 +37,6 @@ typedef StaticTask_t osStaticThreadDef_t;
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-int MODEM_MODE_GSE = 0;
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -49,8 +48,6 @@ int MODEM_MODE_GSE = 0;
 I2C_HandleTypeDef hi2c1;
 
 SPI_HandleTypeDef hspi1;
-
-TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart2;
 
@@ -76,7 +73,7 @@ const osThreadAttr_t TaskCMX869B_attributes = {
   .cb_size = sizeof(TaskCMX869BControlBlock),
   .stack_mem = &TaskCMX869BBuffer[0],
   .stack_size = sizeof(TaskCMX869BBuffer),
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityRealtime,
 };
 /* USER CODE BEGIN PV */
 /* USER CODE END PV */
@@ -86,13 +83,12 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_USART2_UART_Init(void);
-static void MX_TIM2_Init(void);
 static void MX_SPI1_Init(void);
 void StartTaskHK(void *argument);
 void StartTaskCMX869B(void *argument);
 
 /* USER CODE BEGIN PFP */
-
+void cbus_entry();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -117,9 +113,9 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-  // OpenOCDのreset-initがPLL(HSI x16)をSYSCLKにしているので、
-  // そのままだとSystemClock_Config()のPLL再設定がHAL_ERRORになる。HSIに戻しておく
-  HAL_RCC_DeInit();
+    // OpenOCDのreset-initがPLL(HSI x16)をSYSCLKにしているので、
+    // そのままだとSystemClock_Config()のPLL再設定がHAL_ERRORになる。HSIに戻しておく
+    HAL_RCC_DeInit();
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -133,30 +129,29 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   MX_USART2_UART_Init();
-  MX_TIM2_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-  // xprintの実働関数の登録,uart_putcはCMX869B.cで定義
-  xdev_out(uart_putc);
+    // xprintの実働関数の登録,uart_putcはCMX869B.cで定義
+    xdev_out(uart_putc);
   /* USER CODE END 2 */
 
   /* Init scheduler */
   osKernelInitialize();
 
   /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
+    /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
+    /* add semaphores, ... */
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
+    /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
+    /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -167,11 +162,11 @@ int main(void)
   TaskCMX869BHandle = osThreadNew(StartTaskCMX869B, NULL, &TaskCMX869B_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+    /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
+    /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
@@ -321,51 +316,6 @@ static void MX_SPI1_Init(void)
 }
 
 /**
-  * @brief TIM2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM2_Init(void)
-{
-
-  /* USER CODE BEGIN TIM2_Init 0 */
-
-  /* USER CODE END TIM2_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM2_Init 1 */
-
-  /* USER CODE END TIM2_Init 1 */
-  htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 799;
-  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 9;
-  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM2_Init 2 */
-
-  /* USER CODE END TIM2_Init 2 */
-
-}
-
-/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -460,11 +410,15 @@ static void MX_GPIO_Init(void)
 //************************
 // 外部割り込み対策
 //************************
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-  // 設定したピン番号に合わせて変更
-  //if (GPIO_Pin == C_INT_Pin) CMX869B_poll();
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+    // 設定したピン番号に合わせて変更
+    if (GPIO_Pin == C_INT_Pin) {
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        vTaskNotifyGiveFromISR(TaskCMX869BHandle, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
 }
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartTaskHK */
@@ -477,12 +431,11 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 void StartTaskHK(void *argument)
 {
   /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  for(;;)
-  {
-    TaskHKEntry(argument);
-    osDelay(1);
-  }
+    /* Infinite loop */
+    for (;;) {
+        TaskHKEntry(argument);
+        osDelay(1);
+    }
   /* USER CODE END 5 */
 }
 
@@ -496,12 +449,12 @@ void StartTaskHK(void *argument)
 void StartTaskCMX869B(void *argument)
 {
   /* USER CODE BEGIN StartTaskCMX869B */
-  /* Infinite loop */
-  for(;;)
-  {
-    TaskCMX86BEntry(argument);
-    osDelay(1);
-  }
+    /* Infinite loop */
+    for (;;) {
+        //TaskCMX86BEntry(argument);
+        cbus_entry();
+        osDelay(1);
+    }
   /* USER CODE END StartTaskCMX869B */
 }
 
@@ -523,10 +476,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-  if (htim->Instance == TIM2)
-  {
-    //CMX869B_poll();
-  }
+    if (htim->Instance == TIM2) {
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        vTaskNotifyGiveFromISR(TaskHKHandle, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
   /* USER CODE END Callback 1 */
 }
 

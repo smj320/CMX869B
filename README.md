@@ -24,20 +24,22 @@ set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32F303xx_FLASH.ld")
 
 ### Txのシーケンス
 
-ループで筆頭送信した後のステータス。Txしていいのは11のときだけ。
-RxはRxRdy1で読んでよいが、Ovrが出ているときは次のデータは死んでいる。
-しかし現在のレジスタを読むことでとりあえずOverは消える。
+一回書くと、一文字の送信に対して5回割込がでる。実際の信号とも一致。
+
 ```aiignore
-05 TxRdy:0 TxUnd:0 RxRdy:0 RxOvr:0
-05 TxRdy:1 TxUnd:0 RxRdy:0 RxOvr:0 <Int発生 書き込みはできない
-05 TxRdy:1 TxUnd:0 RxRdy:0 RxOvr:0
-05 TxRdy:1 TxUnd:0 RxRdy:0 RxOvr:0
-05 TxRdy:1 TxUnd:0 RxRdy:0 RxOvr:0
-05 TxRdy:1 TxUnd:1 RxRdy:0 RxOvr:0 <Int発生　書き込みできる
-05 TxRdy:1 TxUnd:1 RxRdy:0 RxOvr:0
-05 TxRdy:1 TxUnd:1 RxRdy:0 RxOvr:0
-05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0 <Int発生 書いても読んでもよい
-05 TxRdy:1 TxUnd:1 RxRdy:1 RxOvr:0
+HK:09
+0000:1 0 0 0 開始（おそらくTX=0から１に変わった）
+0000:1 1 0 0 送信完了
+0000:1 1 1 0 受信レジスタが有効になった
+____:1 1 0 0 FSCを受信開始
+0000:1 1 1 0 受信レジスタが有効になった
+____:1 1 0 0 CRCを受信開始
+0000:1 1 1 0 受信レジスタが有効になった
+
+Txの操作
+バッファにデータを入れて、割込許可をするとただちにTxDataReady割込が出るので処理させる。
+送信データを送りきったところで最後のTxDataReady割込が出るので、そこで割込禁止にする。
+
 ```
 
 oops: 3 の中身

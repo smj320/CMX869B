@@ -3,15 +3,16 @@
 //
 #include "main.h"
 #include "cmsis_os.h"
+#include "task.h"
 #include <string.h>
 #include "stm32f3xx_hal.h"
-#include "stm32f3xx_ll_spi.h"
 #include "xprintf.h"
+#include "SEGGER_RTT.h"
 
 #define N_TXBuf 80
 #define N_RXBuf 80
 
-// 割り当てによって適宜変更,ソースでは無番号を使う
+// 割り当てによって適宜変更,ソースでは無番号を使うR
 extern UART_HandleTypeDef huart2;
 extern SPI_HandleTypeDef hspi1;
 extern TIM_HandleTypeDef htim2;
@@ -19,13 +20,12 @@ extern TIM_HandleTypeDef htim2;
 #define hspi hspi1
 #define htim htim2
 
-void CMX869B_Init(int is_gse);
-void CMX869B_putc(char c);
-uint8_t CMX869B_getc();
-void CMX869B_poll();
-void CMX869B_write(uint8_t data[], int len);
-int CMX869B_read(uint8_t data[], int len);
-int CMX869B_rx_errors(void);
+static int TxPtr = 0, RxPtr = 0;
+void CMX_putc(char c);
+uint8_t CMX_getc();
+
+void Init(int is_gse);
+
 
 // ==========================================
 // レジスタとビットフィールド
@@ -61,8 +61,10 @@ union {
 // Status Register
 // --------------
 #define StatusReg_ADDR 0xE6
+
 union {
     uint16_t Word;
+
     struct {
         uint16_t FSKDemodulatorOutput: 1; // b0
         uint16_t Char2Mode: 1; // b1
@@ -194,8 +196,6 @@ static void cbus_tx_int_disable(void);
 // ==========================================
 // グローバル変数
 // ==========================================
-// 動作モード
-static int Is_gse = 0;
 
 //*==========================================
 // 公開関数
@@ -203,12 +203,12 @@ static int Is_gse = 0;
 //-----------------
 //初期化
 //-----------------
-void CMX869B_Init(int is_gse) {
+void Init(int is_gse) {
     static int is_loop_back = 1;
     static int is_Cal = 0;
-    //モード通知
-    Is_gse = is_gse;
-    is_loop_back = 0;
+
+    // 動作モード選択
+    is_loop_back = 1;
     is_Cal = 0;
 
     // SPIイネーブル
@@ -255,37 +255,51 @@ void CMX869B_Init(int is_gse) {
         for (uint8_t tic = 0; tic < 60; tic++) {
             QamStatusReg.Word = cbus_read_reg(QamStatusReg_ADDR);
             xprintf("GSE:%d TI:%03d MSG:%02X SNR:%02X MODE:%02X\r\n",
-                    Is_gse,
+                    is_gse,
                     tic, QamStatusReg.Bits.Messages,
                     QamStatusReg.Bits.SNR,
                     QamStatusReg.Bits.Mode);
             HAL_Delay(500);
         }
     }
-    //タイマ割込起動
-    //HAL_TIM_Base_Start_IT(&htim);
-    //GRE.Bits.IrqMask = 0b001001;
-    //cbus_write_reg(GRE_ADDR, GRE.Word);
+    GRE.Bits.IrqMask = 0b000001;
+    cbus_write_reg(GRE_ADDR, GRE.Word);
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
     xprintf("Initialized\r\n");
 }
+//=======================================
+//メインの処理
+//=======================================
+void TaskCMX86BEntry(void *argument) {
+    //ジャンパークローズ(0)の場合はGSE
+    int is_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
+    Init(is_gse);
 
-//-----------------
-// ステータス確認、単発リードライト
-//-----------------
-/*
-CMX869B_Status CMX869B_status(void) {
-    CMX869B_Status st;
-    st.Word = cbus_read_reg(StatusReg_ADDR);
-    return st;
-};
-*/
+    //割込の後始末
+    for (;;) {
+        //割込待機
+        uint32_t ulCount = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
+        do {
+            StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
+            if (StatusReg.Bits.RxDataReady == 1) {
+                if (StatusReg.Bits.RxDataOverflow == 0) {
+                    uint8_t c = cbus_read_data();
+                    xprintf("%c", c);
+                }
+            }
+        }while (StatusReg.Bits.IRQ == 1);
 
-void CMX869B_putc(char c) {
+        HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+    }
+}
+
+void CMX_putc(char c) {
+    TxPtr = 0;
     cbus_write_data(c);
 }
 
-uint8_t CMX869B_getc() {
+uint8_t CMX_getc() {
     uint8_t c = cbus_read_data();
     return c;
 }
@@ -295,7 +309,6 @@ uint8_t CMX869B_getc() {
 //-----------------
 // HDLC受信ではFCS(CRC-16)の2バイトもデータとして渡されるので、その分を余分に確保する
 #define N_FCS 2
-static int TxPtr = 0, RxPtr = 0;
 static uint8_t tx_buffer[N_TXBuf];
 static uint8_t rx_buffer[N_RXBuf + N_FCS];
 // 受信完了フレーム(FCS除く)
@@ -307,7 +320,7 @@ static volatile int RxErrCount = 0;
 void CMX869b_write(uint8_t data[], int len) {
     memcpy(tx_buffer, data, len);
     TxPtr = 1;
-    CMX869B_putc(tx_buffer[0]);
+    CMX_putc(tx_buffer[0]);
 }
 
 // 受信完了フレームをコピーしてデータ長を返す。未受信なら0
@@ -323,125 +336,38 @@ int CMX869b_read(uint8_t data[], int len) {
 int CMX869b_rx_errors(void) {
     return RxErrCount;
 }
+
 // 割込要因のロギング
-static int cnt = 0;
-void rtt_log(uint8_t reason) {
-    char msg[] = {
-        'X',':',
-        ' ','N','0',':',
-        ' ','R','X','D',':',
-        '0'+StatusReg.Bits.RxDataReady,
-        ' ','R','X','O',':',
-        '0'+StatusReg.Bits.RxDataOverflow,
-        ' ','T','X','O',':',
-        '0'+StatusReg.Bits.TxDataReady,
-        ' ','T','X','U',':',
-        '0'+StatusReg.Bits.TxDataUnderflow,
-        '\r','\n'
-    };
-    msg[0] = reason;
-    msg[4] = '0'+cnt++%10;
-    // SEGGER_RTT_WriteNoLock(0, msg, sizeof(msg));
-}
-// C_INT(IRQN)の立下り割込から呼ぶ
-void CMX869B_poll() {
-    static int rx_bad = 0;
-    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
-    if (StatusReg.Bits.RxDataReady == 1 || StatusReg.Bits.RxDataOverflow == 1) {
-        uint8_t c =CMX869B_getc();
-        rtt_log('R');
-    }
-    else if (StatusReg.Bits.TxDataReady == 1 || StatusReg.Bits.TxDataUnderflow == 1) {
-        if (TxPtr<N_TXBuf) {
-            CMX869B_putc(TxPtr);
-            rtt_log('T');
-            TxPtr++;
-        }
-    }else {
-        rtt_log('Z');
-    }
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
-    rtt_log('E');
-    /*
-    // 立下りエッジ割込なので、IRQNがHighに戻るまで処理しないと次の割込を取りこぼす
-    do {
-        st.Word = cbus_read_reg(StatusReg_ADDR);
-        if (st.Bits.RxDataReady == 1) {
-            uint8_t c = CMX869B_getc();
-            if (st.Bits.RxDataOverflow == 1) rx_bad = 1;
-            if (RxPtr < N_RXBuf + N_FCS) {
-                rx_buffer[RxPtr++] = c;
-            } else {
-                rx_bad = 1;
-            }
-            if (st.Bits.FCS == 1) {
-                // FCS一致=フレーム終端。末尾2バイトのFCSを除いて渡す
-                if (rx_bad == 0 && RxPtr > N_FCS) {
-                    RxFrameLen = RxPtr - N_FCS;
-                    memcpy(rx_frame, rx_buffer, RxFrameLen);
-                } else {
-                    RxErrCount++;
-                }
-                RxPtr = 0;
-                rx_bad = 0;
-            } else if (RxPtr >= N_RXBuf + N_FCS && rx_bad == 1) {
-                // FCSが一致しないまま溢れた。破棄して次のフレームに備える
-                RxErrCount++;
-                RxPtr = 0;
-                rx_bad = 0;
-            }
-        }
-        // HDLCではUnderflow=フレーム終了(FCS+閉じフラグ送出)なので、TxDataReadyだけで書き込む
-        // 書くデータが無ければアンダーフローしてCMX869BがFCSを自動付加する
-        if (st.Bits.TxDataReady == 1) {
-            if (TxPtr < N_TXBuf) {
-                CMX869B_putc(tx_buffer[TxPtr++]);
-            }
-        }
-    } while (HAL_GPIO_ReadPin(C_INT_GPIO_Port, C_INT_Pin) == GPIO_PIN_RESET);
-    */
-    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+void int_log(int count) {
+    xprintf("%04d:%d %d %d %d\r\n",
+            count,
+            StatusReg.Bits.TxDataReady,
+            StatusReg.Bits.TxDataUnderflow,
+            StatusReg.Bits.RxDataReady,
+            StatusReg.Bits.RxDataOverflow
+    );
 }
 
 // ==========================================
 // C-BUS操作関数
 // ==========================================
-static void cbux_transmit_receive(const uint8_t tx_data[], uint8_t rx_data[], int len) {
-    SPI_TypeDef *spi = hspi.Instance;
-    //これをしておかないと、CSが上がる前にINTに飛んでしまう。
-    //__disable_irq()の場合はミュート中に割込があっても戻したときに記憶していて飛ぶ。
-    __disable_irq();
-    C_CS_GPIO_Port->BSRR = (uint32_t) C_CS_Pin << 16;
-    for (int i = 0; i < len; i++) {
-        while (!LL_SPI_IsActiveFlag_TXE(spi)) {
-        }
-        LL_SPI_TransmitData8(spi, tx_data[i]);
-        // 全二重なので受信完了＝送信完了
-        while (!LL_SPI_IsActiveFlag_RXNE(spi)) {
-        }
-        rx_data[i] = LL_SPI_ReceiveData8(spi);
-    }
-    // CS を上げる前に最後のフレームの完了を待つ
-    while (LL_SPI_IsActiveFlag_BSY(spi)) {
-    }
-    C_CS_GPIO_Port->BSRR = C_CS_Pin;
-    __enable_irq();
-}
-
 void cbus_write_reg(uint8_t adr, uint16_t data) {
     static uint8_t tx_data[3], rx_data[3];
     tx_data[0] = adr;
     tx_data[1] = (data >> 8) & 0xFF;
     tx_data[2] = (data >> 0) & 0xFF;
-    cbux_transmit_receive(tx_data, rx_data, 3);
+    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
+    HAL_SPI_TransmitReceive(&hspi, tx_data, rx_data, 3, 1);
+    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
 }
 
 uint16_t cbus_read_reg(uint8_t adr) {
     static uint8_t tx_data[3], rx_data[3];
     tx_data[0] = adr;
     tx_data[1] = tx_data[2] = 0x0;
-    cbux_transmit_receive(tx_data, rx_data, 3);
+    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
+    HAL_SPI_TransmitReceive(&hspi, tx_data, rx_data, 3, 1);
+    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
     uint16_t result = (rx_data[1] << 8) + rx_data[2];
     return result;
 }
@@ -450,27 +376,30 @@ void cbus_write_data(uint8_t data) {
     static uint8_t tx_data[3], rx_data[3];
     tx_data[0] = TxData_ADDR;
     tx_data[1] = tx_data[2] = data;
-    cbux_transmit_receive(tx_data, rx_data, 2);
+    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
+    HAL_SPI_TransmitReceive(&hspi, tx_data, rx_data, 2, 1);
+    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
 }
 
 uint8_t cbus_read_data() {
     static uint8_t tx_data[2], rx_data[2];
     tx_data[0] = RxData_ADDR;
     tx_data[1] = 0x0;
-    cbux_transmit_receive(tx_data, rx_data, 2);
+    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
+    HAL_SPI_TransmitReceive(&hspi, tx_data, rx_data, 2, 1);
+    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
     return rx_data[1];
 }
 
-void cbus_tx_int_enable(void) {
+void cbus_tx_int_enable() {
     GRE.Bits.IrqMask = 0b001001;
     cbus_write_reg(GRE_ADDR, GRE.Word);
 }
 
-void cbus_tx_int_disable(void) {
+void cbus_tx_int_disable() {
     GRE.Bits.IrqMask = 0b000001;
     cbus_write_reg(GRE_ADDR, GRE.Word);
 }
-
 // ==========================================
 // xprintf用
 // ==========================================
@@ -490,18 +419,18 @@ void set_bell(void) {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_BELL;
     TxReg.Bits.TxLevel = TX_LEVEL;
-    //TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
-    //TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    TxReg.Bits.StartStop = 0b11; //Special Mode
-    TxReg.Bits.DataBits = 0b110; //HDLC Mode
+    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
+    TxReg.Bits.DataBits = 0b110; //8bit Stop1
+    //TxReg.Bits.StartStop = 0b11; //Special Mode
+    //TxReg.Bits.DataBits = 0b110; //HDLC Mode
     cbus_write_reg(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_BELL;
     RxReg.Bits.RxLevel = RX_LEVEL;
-    //RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
-    //RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    RxReg.Bits.StartStop_Synch = 0b111; //Special Mode
-    RxReg.Bits.BitsParity = 0b110; //HDLC Mode
+    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
+    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
+    //RxReg.Bits.StartStop_Synch = 0b111; //Special Mode
+    //RxReg.Bits.BitsParity = 0b110; //HDLC Mode
     cbus_write_reg(RxReg_ADDR, RxReg.Word);
 }
 
@@ -554,15 +483,3 @@ void set_qam_call(void) {
     HAL_Delay(10);
 }
 
-//=======================================
-//メインの処理
-//=======================================
-void TaskCMX86BEntry(void *argument) {
-    //ジャンパークローズ(0)の場合はGSE
-    int  mode_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin)==0 ? 1 : 0;
-    //CMX869B_Init(mode_gse);
-    for (;;) {
-        xprintf("MD: Frank Zap\r\n");
-        osDelay(1000);
-    }
-}

@@ -49,9 +49,9 @@ typedef union {
 #define N_TXBuf 80
 #define N_RXBuf 80
 //
-void TaskCMX86BEntry(void *argument);
-
-// xprintf用
+void CMX_putc(char c);
+uint8_t CMX_getc();
+void Init(int is_gse);// xprintf用
 //mainの初期化のところで xdev_out(uart_putc); と登録
 void uart_putc(unsigned char c);
 

@@ -372,25 +372,39 @@ int CMX869b_rx_errors(void) {
 // ==========================================
 // C-BUS操作関数
 // ==========================================
+void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len) {
+    //CS Low
+    vTaskSuspendAll();
+    C_CS_GPIO_Port->BSRR = C_CS_Pin<<16;
+    // 2. 3バイト分をダイレクトに送受信する（例としてSPI1を使用）
+    for (int i = 0; i < len; i++) {
+        // 送信バッファが空になるのを待つ
+        while (!(SPI1->SR & SPI_FLAG_TXE));
+        // データを書き込む（書き込んだ瞬間にクロックが出始める）
+        *(volatile uint8_t*)(&SPI1->DR) = tx_data[i];
+
+        // 受信データが完了するのを待つ
+        while (!(SPI1->SR & SPI_FLAG_RXNE));
+        // 受信データを読み出す
+        rx_data[i] = *(volatile uint8_t*)(&SPI1->DR);
+    }
+    //CS High
+    C_CS_GPIO_Port->BSRR = C_CS_Pin;
+    xTaskResumeAll();
+}
 void cbus_write_reg(uint8_t adr, uint16_t data) {
     static uint8_t tx_data[3], rx_data[3];
     tx_data[0] = adr;
     tx_data[1] = (data >> 8) & 0xFF;
     tx_data[2] = (data >> 0) & 0xFF;
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
-    HAL_SPI_TransmitReceive(&hspi, tx_data, rx_data, 3, 1);
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
+    cbus_read_write(tx_data, rx_data, 3);
 }
 
 uint16_t cbus_read_reg(uint8_t adr) {
     static uint8_t tx_data[3], rx_data[3];
     tx_data[0] = adr;
     tx_data[1] = tx_data[2] = 0x0;
-    vTaskSuspendAll();
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
-    HAL_SPI_TransmitReceive(&hspi, tx_data, rx_data, 3, 1);
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
-    xTaskResumeAll();
+    cbus_read_write(tx_data, rx_data, 3);
     uint16_t result = (rx_data[1] << 8) + rx_data[2];
     return result;
 }
@@ -399,20 +413,14 @@ void cbus_write_data(uint8_t data) {
     static uint8_t tx_data[3], rx_data[3];
     tx_data[0] = TxData_ADDR;
     tx_data[1] = tx_data[2] = data;
-    vTaskSuspendAll();
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
-    HAL_SPI_TransmitReceive(&hspi, tx_data, rx_data, 2, 1);
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
-    xTaskResumeAll();
+    cbus_read_write(tx_data, rx_data, 2);
 }
 
 uint8_t cbus_read_data() {
     static uint8_t tx_data[2], rx_data[2];
     tx_data[0] = RxData_ADDR;
     tx_data[1] = 0x0;
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
-    HAL_SPI_TransmitReceive(&hspi, tx_data, rx_data, 2, 1);
-    HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
+    cbus_read_write(tx_data, rx_data, 2);
     return rx_data[1];
 }
 

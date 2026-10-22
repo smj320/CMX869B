@@ -21,8 +21,14 @@ extern TIM_HandleTypeDef htim2;
 #define htim htim2
 
 static int TxPtr = 0, RxPtr = 0;
+
 void CMX_putc(char c);
+
 uint8_t CMX_getc();
+
+//割込観測用
+int irq_count = 0;
+
 
 void Init(int is_gse);
 
@@ -62,7 +68,7 @@ union {
 // --------------
 #define StatusReg_ADDR 0xE6
 
-union {
+typedef union {
     uint16_t Word;
 
     struct {
@@ -83,7 +89,11 @@ union {
         uint16_t RingDetect: 1; // b14
         uint16_t IRQ: 1; // b15
     } __attribute__((packed)) Bits;
-} StatusReg = {0};;
+} StatusRegType;
+
+StatusRegType StatusReg = {0};
+#define N_StatusTypedef 100
+StatusRegType StatusRegArray[N_StatusTypedef];
 
 // --------------
 // Tx Register
@@ -189,6 +199,8 @@ static void cbus_write_data(uint8_t data);
 
 static uint8_t cbus_read_data();
 
+void int_log(int count);
+
 static void cbus_tx_int_enable(void);
 
 static void cbus_tx_int_disable(void);
@@ -262,15 +274,30 @@ void Init(int is_gse) {
             HAL_Delay(500);
         }
     }
-    GRE.Bits.IrqMask = 0b000001;
+    GRE.Bits.IrqMask = 0b001001;
     cbus_write_reg(GRE_ADDR, GRE.Word);
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
     xprintf("Initialized\r\n");
 }
+
+// 割込要因のロギング
+void int_log(int count) {
+    xprintf("%04d:%d %d %d %d %d\r\n",
+            count,
+            StatusReg.Bits.IRQ,
+            StatusReg.Bits.TxDataReady,
+            StatusReg.Bits.TxDataUnderflow,
+            StatusReg.Bits.RxDataReady,
+            StatusReg.Bits.RxDataOverflow
+    );
+}
+
 //=======================================
 //メインの処理
 //=======================================
+static int count = 0;
 void TaskCMX86BEntry(void *argument) {
+    static int ptr = 0;
     //ジャンパークローズ(0)の場合はGSE
     int is_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
     Init(is_gse);
@@ -279,18 +306,23 @@ void TaskCMX86BEntry(void *argument) {
     for (;;) {
         //割込待機
         uint32_t ulCount = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        //
         HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
-        do {
+        for (int i=0; i<5; i++) {
             StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
+            if (StatusReg.Bits.IRQ==0) break;
+            int_log(count);
             if (StatusReg.Bits.RxDataReady == 1) {
-                if (StatusReg.Bits.RxDataOverflow == 0) {
-                    uint8_t c = cbus_read_data();
-                    xprintf("%c", c);
+                uint8_t c = cbus_read_data();
+            }
+            if (StatusReg.Bits.TxDataReady==1) {
+                if (TxPtr++<1) {
+                    cbus_write_data('B');
                 }
             }
-        }while (StatusReg.Bits.IRQ == 1);
-
+        }
         HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+        count++;
     }
 }
 
@@ -337,17 +369,6 @@ int CMX869b_rx_errors(void) {
     return RxErrCount;
 }
 
-// 割込要因のロギング
-void int_log(int count) {
-    xprintf("%04d:%d %d %d %d\r\n",
-            count,
-            StatusReg.Bits.TxDataReady,
-            StatusReg.Bits.TxDataUnderflow,
-            StatusReg.Bits.RxDataReady,
-            StatusReg.Bits.RxDataOverflow
-    );
-}
-
 // ==========================================
 // C-BUS操作関数
 // ==========================================
@@ -365,9 +386,11 @@ uint16_t cbus_read_reg(uint8_t adr) {
     static uint8_t tx_data[3], rx_data[3];
     tx_data[0] = adr;
     tx_data[1] = tx_data[2] = 0x0;
+    vTaskSuspendAll();
     HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
     HAL_SPI_TransmitReceive(&hspi, tx_data, rx_data, 3, 1);
     HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
+    xTaskResumeAll();
     uint16_t result = (rx_data[1] << 8) + rx_data[2];
     return result;
 }
@@ -376,9 +399,11 @@ void cbus_write_data(uint8_t data) {
     static uint8_t tx_data[3], rx_data[3];
     tx_data[0] = TxData_ADDR;
     tx_data[1] = tx_data[2] = data;
+    vTaskSuspendAll();
     HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_RESET);
     HAL_SPI_TransmitReceive(&hspi, tx_data, rx_data, 2, 1);
     HAL_GPIO_WritePin(C_CS_GPIO_Port, C_CS_Pin, GPIO_PIN_SET);
+    xTaskResumeAll();
 }
 
 uint8_t cbus_read_data() {
@@ -400,6 +425,7 @@ void cbus_tx_int_disable() {
     GRE.Bits.IrqMask = 0b000001;
     cbus_write_reg(GRE_ADDR, GRE.Word);
 }
+
 // ==========================================
 // xprintf用
 // ==========================================
@@ -482,4 +508,3 @@ void set_qam_call(void) {
     cbus_write_reg(QamCmdReg_ADDR, QamReg.Word);
     HAL_Delay(10);
 }
-

@@ -451,8 +451,8 @@ void StartTaskCMX869B(void *argument)
   /* USER CODE BEGIN StartTaskCMX869B */
     /* Infinite loop */
     for (;;) {
-        //TaskCMX86BEntry(argument);
-        cbus_entry();
+        TaskCMX86BEntry(argument);
+        //cbus_entry();
         osDelay(1);
     }
   /* USER CODE END StartTaskCMX869B */

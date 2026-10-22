@@ -55,5 +55,5 @@ void Init(int is_gse);// xprintf用
 //mainの初期化のところで xdev_out(uart_putc); と登録
 void uart_putc(unsigned char c);
 
-
+void TaskCMX86BEntry(void *argument);
 #endif //CMX869B_MODEMTASK_H

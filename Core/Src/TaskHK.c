@@ -18,8 +18,8 @@ void TaskHKEntry(void *argument) {
 
     for (;;) {
         //タイマ割込待機
+        xprintf("\r\n");
         CMX_putc('A');
-        xprintf("\r\nHK:%02d\r\n", num++%10);
         // 1秒待機
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
     }

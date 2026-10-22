@@ -8,6 +8,9 @@
 FreeOS+lwIPでソケットAPIをつかったり自動再送させるためのベース。
 
 ## 重要事項
+
+### リンクエラー対策
+
 FreeRTOSをいれた場合、Cmakefileにリンカスクリプトを明示しないとエラーになる
 ```aiignore
 # project settings
@@ -17,6 +20,14 @@ set(CMAKE_C_STANDARD 11)
 
 # 以下を追加
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32F303xx_FLASH.ld")
+```
+
+### PLL起動エラー対策
+
+OpenOCDのreset-initがPLL(HSI x16)をSYSCLKにしているので、
+そのままだとSystemClock_Config()のPLL再設定がHAL_ERRORになる。HSIに戻しておく
+```aiignore
+HAL_RCC_DeInit();
 ```
 
 ## メモ

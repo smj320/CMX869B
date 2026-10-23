@@ -7,6 +7,7 @@
 #include "task.h"
 #include "stm32f3xx_hal.h"
 #include "xprintf.h"
+#include "stream_buffer.h"
 #include "TaskCMX869B.h"
 #include "TaskCMX869B_priv.h"
 
@@ -17,7 +18,8 @@ RxRegType RxReg = {0};
 QamRegType QamReg = {0};
 QamStatusRegType QamStatusReg = {0};
 
-int TxPtr = 0;
+StreamBufferHandle_t xStreamBufferTx;
+StreamBufferHandle_t xStreamBufferRx;
 
 // ****************************************************
 // Externで外部に出す関数
@@ -28,8 +30,9 @@ void TaskCMX869BEntry(void *argument) {
     static int ptr = 0;
     //ジャンパークローズ(0)の場合はGSE
     int is_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
+    xStreamBufferRx = xStreamBufferCreate(80, 1);
+    xStreamBufferTx = xStreamBufferCreate(80, 1);
     cmx_init(is_gse);
-
     //割込の後始末
     for (;;) {
         xprintf("Frank\r\n");
@@ -38,16 +41,20 @@ void TaskCMX869BEntry(void *argument) {
 }
 // 割込処理
 void INT_CMX869B_ISR() {
+    static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
-    for (int i = 0; i < 5; i++) {
-        StatusReg.Word = cbus_read_reg(StatusReg_ADDR,1);
-        if (StatusReg.Bits.RxDataReady == 1) {
-            uint8_t c = cbus_read_data(1);
-        }
-        if (StatusReg.Bits.TxDataReady == 1) {
-            if (TxPtr++ < 1) {
-                cbus_write_data('B',1);
-            }
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 1);
+    if (StatusReg.Bits.RxDataReady == 1) {
+        uint8_t c = cbus_read_data(1);
+        xStreamBufferSendFromISR(
+            xStreamBufferRx, &c, 1, &xHigherPriorityTaskWoken);
+    }
+    if (StatusReg.Bits.TxDataReady == 1) {
+        uint8_t c;
+        size_t res = xStreamBufferReceiveFromISR(
+            xStreamBufferTx, &c, 1, &xHigherPriorityTaskWoken);
+        if (res != 0) {
+            cbus_write_data('B', 1);
         }
     }
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
@@ -138,21 +145,15 @@ void int_log(int count) {
 //=======================================
 // データリードライト
 //=======================================
-void CMX869B_putc(char c) {
-    TxPtr = 0;
+void CMX869B_flush_Tx(char c) {
     cbus_write_data(c, 0);
-}
-
-uint8_t CMX_getc() {
-    uint8_t c = cbus_read_data(0);
-    return c;
 }
 // ==========================================
 // C-BUS操作関数
 // ==========================================
 void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len, int is_isr) {
     //CS Low
-    if (is_isr==0) vTaskSuspendAll();
+    if (is_isr == 0) vTaskSuspendAll();
     C_CS_GPIO_Port->BSRR = C_CS_Pin << 16;
     // 2. 3バイト分をダイレクトに送受信する（例としてSPI1を使用）
     for (int i = 0; i < len; i++) {
@@ -168,7 +169,7 @@ void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len, int is
     }
     //CS High
     C_CS_GPIO_Port->BSRR = C_CS_Pin;
-    if (is_isr==0) xTaskResumeAll();
+    if (is_isr == 0) xTaskResumeAll();
 }
 
 void cbus_write_reg(uint8_t adr, uint16_t data, int is_isr) {
@@ -227,7 +228,7 @@ void set_bell() {
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
     //TxReg.Bits.StartStop = 0b11; //Special Mode
     //TxReg.Bits.DataBits = 0b110; //HDLC Mode
-    cbus_write_reg(TxReg_ADDR, TxReg.Word,0);
+    cbus_write_reg(TxReg_ADDR, TxReg.Word, 0);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_BELL;
     RxReg.Bits.RxLevel = RX_LEVEL;
@@ -235,7 +236,7 @@ void set_bell() {
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
     //RxReg.Bits.StartStop_Synch = 0b111; //Special Mode
     //RxReg.Bits.BitsParity = 0b110; //HDLC Mode
-    cbus_write_reg(RxReg_ADDR, RxReg.Word,0);
+    cbus_write_reg(RxReg_ADDR, RxReg.Word, 0);
 }
 
 // AutoModem ネゴシエーション必須
@@ -245,21 +246,21 @@ void set_qam_answer() {
     TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    cbus_write_reg(TxReg_ADDR, TxReg.Word,0);
+    cbus_write_reg(TxReg_ADDR, TxReg.Word, 0);
     HAL_Delay(10);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    cbus_write_reg(RxReg_ADDR, RxReg.Word,0);
+    cbus_write_reg(RxReg_ADDR, RxReg.Word, 0);
     HAL_Delay(10);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
     //QamReg.Bits.br = QamMaxBR_2400;
     QamReg.Bits.command = QamAnswer;
     QamReg.Bits.zeros = QamZeros;
-    cbus_write_reg(QamCmdReg_ADDR, QamReg.Word,0);
+    cbus_write_reg(QamCmdReg_ADDR, QamReg.Word, 0);
     HAL_Delay(10);
 }
 
@@ -269,21 +270,21 @@ void set_qam_call() {
     TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    cbus_write_reg(TxReg_ADDR, TxReg.Word,0);
+    cbus_write_reg(TxReg_ADDR, TxReg.Word, 0);
     HAL_Delay(10);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
     RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    cbus_write_reg(RxReg_ADDR, RxReg.Word,0);
+    cbus_write_reg(RxReg_ADDR, RxReg.Word, 0);
     HAL_Delay(10);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
     //QamReg.Bits.br = QamMaxBR_2400;
     QamReg.Bits.command = QamCall;
     QamReg.Bits.zeros = QamZeros;
-    cbus_write_reg(QamCmdReg_ADDR, QamReg.Word,0);
+    cbus_write_reg(QamCmdReg_ADDR, QamReg.Word, 0);
     HAL_Delay(10);
 }
 

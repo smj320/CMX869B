@@ -7,6 +7,7 @@
 
 void TaskCMX869BEntry(void *argument);
 void INT_CMX869B_ISR(void);
+void CMX869B_putc(char c);
 void uart_putc(unsigned char c);
 
 #endif //CMX869B_TASKCMX869B_H

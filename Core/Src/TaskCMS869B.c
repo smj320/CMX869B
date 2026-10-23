@@ -42,7 +42,7 @@ void INT_CMX869B_ISR() {
     for (int i = 0; i < 5; i++) {
         StatusReg.Word = cbus_read_reg(StatusReg_ADDR,1);
         if (StatusReg.Bits.RxDataReady == 1) {
-            //uint8_t c = cbus_read_data_From_ISR();
+            uint8_t c = cbus_read_data(1);
         }
         if (StatusReg.Bits.TxDataReady == 1) {
             if (TxPtr++ < 1) {
@@ -117,9 +117,9 @@ void cmx_init(int is_gse) {
             HAL_Delay(500);
         }
     }
-    //GRE.Bits.IrqMask = 0b001001;
-    //cbus_write_reg(GRE_ADDR, GRE.Word, 0);
-    //StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
+    GRE.Bits.IrqMask = 0b001001;
+    cbus_write_reg(GRE_ADDR, GRE.Word, 0);
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
     xprintf("Initialized\r\n");
 }
 
@@ -138,7 +138,7 @@ void int_log(int count) {
 //=======================================
 // データリードライト
 //=======================================
-void CMX_putc(char c) {
+void CMX869B_putc(char c) {
     TxPtr = 0;
     cbus_write_data(c, 0);
 }
@@ -152,7 +152,7 @@ uint8_t CMX_getc() {
 // ==========================================
 void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len, int is_isr) {
     //CS Low
-    if (is_isr==1) vTaskSuspendAll();
+    if (is_isr==0) vTaskSuspendAll();
     C_CS_GPIO_Port->BSRR = C_CS_Pin << 16;
     // 2. 3バイト分をダイレクトに送受信する（例としてSPI1を使用）
     for (int i = 0; i < len; i++) {
@@ -168,7 +168,7 @@ void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len, int is
     }
     //CS High
     C_CS_GPIO_Port->BSRR = C_CS_Pin;
-    if (is_isr==1) xTaskResumeAll();
+    if (is_isr==0) xTaskResumeAll();
 }
 
 void cbus_write_reg(uint8_t adr, uint16_t data, int is_isr) {

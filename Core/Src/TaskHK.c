@@ -7,6 +7,7 @@
 #include "task.h"
 #include "TaskHK.h"
 #include "TaskHK_priv.h"
+#include "TaskCMX869B.h"
 
 void TaskHKEntry(void *argument) {
     int num = 0;
@@ -20,7 +21,7 @@ void TaskHKEntry(void *argument) {
     for (;;) {
         //タイマ割込待機
         xprintf("Zap:\r\n");
-        //CMX_putc('A');
+        CMX869B_putc('A');
         // 1秒待機
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
     }

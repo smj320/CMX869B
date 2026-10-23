@@ -10,8 +10,7 @@
 #include "TaskCMX869B.h"
 
 void TaskHKEntry(void *argument) {
-    int num = 0;
-    size_t res;
+    static int num = 0;
     // 基準時刻の初期化
     const TickType_t xFrequency = pdMS_TO_TICKS(1000*2); // 1000msをTick数に変換
     // 現在のティック数を取得して初期化
@@ -19,21 +18,26 @@ void TaskHKEntry(void *argument) {
     for (;;) {
         //タイマ割込待機
         xprintf("Zap:\r\n");
-        uint8_t c = num++ % 100;
+        uint8_t tx_data = num++ % 10;
         //バッファクリアと送信
         //RxOverflowをReadでクリアしているので、割込は毎回発生する。
         //そのタイミングでTxDataReadyでデータがが到達していれば送信される。
         xStreamBufferReset(xStreamBufferTx);
-        xStreamBufferSend(xStreamBufferRx, &c, 1, 0);
-        CMX869B_flush_Tx(0x55);
+        xStreamBufferSend(xStreamBufferTx, &tx_data, 1, 0);
+        CMX869B_flush_Tx();
         //待機
         osDelay(500);
         //読んでみる
-        do {
-            res = xStreamBufferReceive(xStreamBufferRx, &c, 1, 0);
-            if (res != 0)xprintf("%02X", c);
-        } while (res != 0);
-        xprintf("\r\n", c);
+        uint8_t rx_data = 0x00;
+        for (;;) {
+            size_t res = xStreamBufferReceive(
+                xStreamBufferRx, &rx_data, 1, 0);
+            if (res == 0) {
+                xprintf("\r\n");
+                break;
+            }
+            xprintf("%02X", rx_data);
+        };
 
         // 1秒待機
         vTaskDelayUntil(&xLastWakeTime, xFrequency);

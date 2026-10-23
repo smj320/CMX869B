@@ -25,7 +25,6 @@ StreamBufferHandle_t xStreamBufferRx;
 // Externで外部に出す関数
 // ****************************************************
 // タスクの実体
-static int count = 0;
 void TaskCMX869BEntry(void *argument) {
     static int ptr = 0;
     //ジャンパークローズ(0)の場合はGSE
@@ -35,29 +34,45 @@ void TaskCMX869BEntry(void *argument) {
     cmx_init(is_gse);
     //割込の後始末
     for (;;) {
-        xprintf("Frank\r\n");
+        //xprintf("Frank\r\n");
         osDelay(1000);
     }
 }
 // 割込処理
 void INT_CMX869B_ISR() {
     static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    GPIO_PinState pinState;
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 1);
-    if (StatusReg.Bits.RxDataReady == 1) {
-        uint8_t c = cbus_read_data(1);
-        xStreamBufferSendFromISR(
-            xStreamBufferRx, &c, 1, &xHigherPriorityTaskWoken);
-    }
-    if (StatusReg.Bits.TxDataReady == 1) {
-        uint8_t c;
-        size_t res = xStreamBufferReceiveFromISR(
-            xStreamBufferTx, &c, 1, &xHigherPriorityTaskWoken);
-        if (res != 0) {
-            cbus_write_data('B', 1);
+    //割込線を戻した直後に再度かかった場合の取りこぼしを防ぐ。あっても二回。
+    do{
+        StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 1);
+        if (StatusReg.Bits.RxDataReady == 1) {
+            uint8_t rx_data = cbus_read_data(1);
+            xStreamBufferSendFromISR(
+                xStreamBufferRx, &rx_data, 1, &xHigherPriorityTaskWoken);
         }
-    }
+        if (StatusReg.Bits.TxDataReady == 1) {
+            uint8_t tx_data;
+            size_t res = xStreamBufferReceiveFromISR(
+                xStreamBufferTx, &tx_data, 1, &xHigherPriorityTaskWoken);
+            if (res == 1) {
+                cbus_write_data(tx_data, 1);
+            }
+        }
+        //割込線が戻っていなければ再度実行
+        pinState = HAL_GPIO_ReadPin(C_INT_GPIO_Port,C_INT_Pin);
+    }while(pinState==GPIO_PIN_RESET);
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+}
+
+// データ出力開始
+void CMX869B_flush_Tx() {
+    uint8_t c = 0;
+    size_t res = xStreamBufferReceive(
+        xStreamBufferTx, &c, sizeof(c), 0);
+    if (res != 0) {
+        cbus_write_data(c, 0);
+    }
 }
 // ****************************************************
 // 分業
@@ -130,24 +145,6 @@ void cmx_init(int is_gse) {
     xprintf("Initialized\r\n");
 }
 
-// 割込要因のロギング
-void int_log(int count) {
-    xprintf("%04d:%d %d %d %d %d\r\n",
-            count,
-            StatusReg.Bits.IRQ,
-            StatusReg.Bits.TxDataReady,
-            StatusReg.Bits.TxDataUnderflow,
-            StatusReg.Bits.RxDataReady,
-            StatusReg.Bits.RxDataOverflow
-    );
-}
-
-//=======================================
-// データリードライト
-//=======================================
-void CMX869B_flush_Tx(char c) {
-    cbus_write_data(c, 0);
-}
 // ==========================================
 // C-BUS操作関数
 // ==========================================
@@ -213,7 +210,17 @@ void cbus_tx_int_disable(int is_isr) {
     GRE.Bits.IrqMask = 0b000001;
     cbus_write_reg(GRE_ADDR, GRE.Word, is_isr);
 }
-
+// 割込要因のロギング
+void int_log(int count) {
+    xprintf("%04d:%d %d %d %d %d\r\n",
+            count,
+            StatusReg.Bits.IRQ,
+            StatusReg.Bits.TxDataReady,
+            StatusReg.Bits.TxDataUnderflow,
+            StatusReg.Bits.RxDataReady,
+            StatusReg.Bits.RxDataOverflow
+    );
+}
 // ==========================================
 // モデムモード
 // ==========================================

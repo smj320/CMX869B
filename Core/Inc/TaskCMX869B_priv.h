@@ -141,9 +141,8 @@ static void cbus_write_reg(uint8_t adr, uint16_t data, int is_isr);
 static void cbus_write_data(uint8_t data, int is_isr);
 static uint16_t cbus_read_reg(uint8_t adr, int is_isr);
 static uint8_t cbus_read_data(int is_isr);
-static void cbus_tx_int_enable(int is_isr);
-static void cbus_tx_int_disable(int is_isr);
 //
+void qam_monitor(int is_gse, int tic);
 void cmx_init(int is_gse);
 void set_bell(void);
 void set_qam_call(void);

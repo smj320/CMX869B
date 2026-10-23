@@ -16,29 +16,31 @@ void TaskHKEntry(void *argument) {
     // 現在のティック数を取得して初期化
     TickType_t xLastWakeTime = xTaskGetTickCount();
     for (;;) {
-        //タイマ割込待機
         xprintf("Zap:\r\n");
-        uint8_t tx_data = num++ % 10;
-        //バッファクリアと送信
-        //RxOverflowをReadでクリアしているので、割込は毎回発生する。
-        //そのタイミングでTxDataReadyでデータがが到達していれば送信される。
+        /*
+        // バッファクリアと送信
         xStreamBufferReset(xStreamBufferTx);
-        xStreamBufferSend(xStreamBufferTx, &tx_data, 1, 0);
+        for (int i = 0; i < 10; i++) {
+            uint8_t tx_data = num % 10 + i;
+            xStreamBufferSend(xStreamBufferTx, &tx_data, 1, 0);
+        }
         CMX869B_flush_Tx();
-        //待機
+        // 待機
         osDelay(500);
-        //読んでみる
-        uint8_t rx_data = 0x00;
+        // 読んでみる
         for (;;) {
+            /*
+            uint8_t rx_data = 0x00;
             size_t res = xStreamBufferReceive(
                 xStreamBufferRx, &rx_data, 1, 0);
-            if (res == 0) {
+            if (res == 1) {
+                xprintf("%03d ", rx_data);
+            }else {
                 xprintf("\r\n");
                 break;
-            }
-            xprintf("%02X", rx_data);
-        };
-
+            }*/
+        CMX869B_flush_Tx();
+        num++;
         // 1秒待機
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
     }

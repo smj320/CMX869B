@@ -27,52 +27,64 @@ StreamBufferHandle_t xStreamBufferRx;
 // タスクの実体
 void TaskCMX869BEntry(void *argument) {
     static int ptr = 0;
+    static uint8_t tx_data = 0x55, rx_data = 0;
     //ジャンパークローズ(0)の場合はGSE
     int is_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
-    xStreamBufferRx = xStreamBufferCreate(80, 1);
-    xStreamBufferTx = xStreamBufferCreate(80, 1);
+    xStreamBufferRx = xStreamBufferCreate(10, 1);
+    xStreamBufferTx = xStreamBufferCreate(10, 1);
     cmx_init(is_gse);
     //割込の後始末
     for (;;) {
         //xprintf("Frank\r\n");
+        //cbus_write_data(tx_data, 0);
+        //rx_data = cbus_read_data(0);
+
         osDelay(1000);
     }
 }
 // 割込処理
+volatile static int TxPtr = 0;
 void INT_CMX869B_ISR() {
     static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    static uint8_t tx_data, rx_data;
     GPIO_PinState pinState;
+    uint8_t TxBuf[10], RxBuf[10], RxPtr = 0;
+    //
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
-    //割込線を戻した直後に再度かかった場合の取りこぼしを防ぐ。あっても二回。
-    do{
+    do {
         StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 1);
         if (StatusReg.Bits.RxDataReady == 1) {
-            uint8_t rx_data = cbus_read_data(1);
+            rx_data = cbus_read_data(1);
+            RxBuf[RxPtr++ % 10] = rx_data;
             xStreamBufferSendFromISR(
                 xStreamBufferRx, &rx_data, 1, &xHigherPriorityTaskWoken);
         }
         if (StatusReg.Bits.TxDataReady == 1) {
-            uint8_t tx_data;
-            size_t res = xStreamBufferReceiveFromISR(
-                xStreamBufferTx, &tx_data, 1, &xHigherPriorityTaskWoken);
-            if (res == 1) {
+            if (TxPtr < 10) {
+                tx_data = TxPtr;
                 cbus_write_data(tx_data, 1);
+                TxBuf[TxPtr] = tx_data;
+                TxPtr++;
             }
         }
         //割込線が戻っていなければ再度実行
         pinState = HAL_GPIO_ReadPin(C_INT_GPIO_Port,C_INT_Pin);
-    }while(pinState==GPIO_PIN_RESET);
+    } while (pinState == GPIO_PIN_RESET);
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
 }
 
 // データ出力開始
 void CMX869B_flush_Tx() {
+    TxPtr = 0;
+    cbus_write_data(0x03, 0);
+    /*
     uint8_t c = 0;
     size_t res = xStreamBufferReceive(
         xStreamBufferTx, &c, sizeof(c), 0);
     if (res != 0) {
         cbus_write_data(c, 0);
     }
+    */
 }
 // ****************************************************
 // 分業
@@ -83,6 +95,7 @@ void CMX869B_flush_Tx() {
 void cmx_init(int is_gse) {
     static int is_loop_back = 1;
     static int is_Cal = 0;
+    static uint8_t c = 0;
 
     // 動作モード選択
     is_loop_back = 1;
@@ -130,17 +143,13 @@ void cmx_init(int is_gse) {
         }
         //ハンドシェーク監視
         for (uint8_t tic = 0; tic < 60; tic++) {
-            QamStatusReg.Word = cbus_read_reg(QamStatusReg_ADDR, 0);
-            xprintf("GSE:%d TI:%03d MSG:%02X SNR:%02X MODE:%02X\r\n",
-                    is_gse,
-                    tic, QamStatusReg.Bits.Messages,
-                    QamStatusReg.Bits.SNR,
-                    QamStatusReg.Bits.Mode);
-            HAL_Delay(500);
+            qam_monitor(is_gse, tic);
         }
     }
+    //StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
+    //c = cbus_read_data(0);
+    //StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
     GRE.Bits.IrqMask = 0b001001;
-    cbus_write_reg(GRE_ADDR, GRE.Word, 0);
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
     xprintf("Initialized\r\n");
 }
@@ -150,7 +159,7 @@ void cmx_init(int is_gse) {
 // ==========================================
 void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len, int is_isr) {
     //CS Low
-    if (is_isr == 0) vTaskSuspendAll();
+    if (is_isr != 1) vTaskSuspendAll();
     C_CS_GPIO_Port->BSRR = C_CS_Pin << 16;
     // 2. 3バイト分をダイレクトに送受信する（例としてSPI1を使用）
     for (int i = 0; i < len; i++) {
@@ -166,7 +175,7 @@ void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len, int is
     }
     //CS High
     C_CS_GPIO_Port->BSRR = C_CS_Pin;
-    if (is_isr == 0) xTaskResumeAll();
+    if (is_isr != 1) xTaskResumeAll();
 }
 
 void cbus_write_reg(uint8_t adr, uint16_t data, int is_isr) {
@@ -187,29 +196,20 @@ uint16_t cbus_read_reg(uint8_t adr, int is_isr) {
 }
 
 void cbus_write_data(uint8_t data, int is_isr) {
-    static uint8_t tx_data[3], rx_data[3];
+    static uint8_t tx_data[2], rx_data[2];
     tx_data[0] = TxData_ADDR;
-    tx_data[1] = tx_data[2] = data;
-    cbus_read_write(tx_data, rx_data, 3, is_isr);
+    tx_data[1] = data;
+    cbus_read_write(tx_data, rx_data, 2, is_isr);
 }
 
 uint8_t cbus_read_data(int is_isr) {
     static uint8_t tx_data[2], rx_data[2];
     tx_data[0] = RxData_ADDR;
     tx_data[1] = 0x0;
-    cbus_read_write(tx_data, rx_data, 3, is_isr);
+    cbus_read_write(tx_data, rx_data, 2, is_isr);
     return rx_data[1];
 }
 
-void cbus_tx_int_enable(int is_isr) {
-    GRE.Bits.IrqMask = 0b001001;
-    cbus_write_reg(GRE_ADDR, GRE.Word, is_isr);
-}
-
-void cbus_tx_int_disable(int is_isr) {
-    GRE.Bits.IrqMask = 0b000001;
-    cbus_write_reg(GRE_ADDR, GRE.Word, is_isr);
-}
 // 割込要因のロギング
 void int_log(int count) {
     xprintf("%04d:%d %d %d %d %d\r\n",
@@ -221,6 +221,17 @@ void int_log(int count) {
             StatusReg.Bits.RxDataOverflow
     );
 }
+
+void qam_monitor(int is_gse, int tic) {
+    QamStatusReg.Word = cbus_read_reg(QamStatusReg_ADDR, 0);
+    xprintf("GSE:%d TI:%03d MSG:%02X SNR:%02X MODE:%02X\r\n",
+            is_gse,
+            tic, QamStatusReg.Bits.Messages,
+            QamStatusReg.Bits.SNR,
+            QamStatusReg.Bits.Mode);
+    HAL_Delay(500);
+}
+
 // ==========================================
 // モデムモード
 // ==========================================

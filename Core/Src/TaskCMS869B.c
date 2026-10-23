@@ -372,9 +372,8 @@ int CMX869b_rx_errors(void) {
 // ==========================================
 // C-BUS操作関数
 // ==========================================
-void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len) {
+void cbus_read_write_From_ISR(const uint8_t tx_data[], uint8_t rx_data[], int len) {
     //CS Low
-    vTaskSuspendAll();
     C_CS_GPIO_Port->BSRR = C_CS_Pin<<16;
     // 2. 3バイト分をダイレクトに送受信する（例としてSPI1を使用）
     for (int i = 0; i < len; i++) {
@@ -390,8 +389,13 @@ void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len) {
     }
     //CS High
     C_CS_GPIO_Port->BSRR = C_CS_Pin;
+}
+void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len) {
+    vTaskSuspendAll();
+    cbus_read_write_From_ISR(tx_data, rx_data, len);
     xTaskResumeAll();
 }
+
 void cbus_write_reg(uint8_t adr, uint16_t data) {
     static uint8_t tx_data[3], rx_data[3];
     tx_data[0] = adr;

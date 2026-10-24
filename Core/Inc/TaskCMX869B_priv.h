@@ -137,13 +137,15 @@ typedef union {
 // ***********************************************************
 void cbus_read_write_raw(const uint8_t tx_data[], uint8_t rx_data[], int is_isr);
 //
-static void cbus_write_reg(uint8_t adr, uint16_t data, int is_isr);
-static void cbus_write_data(uint8_t data, int is_isr);
-static uint16_t cbus_read_reg(uint8_t adr, int is_isr);
-static uint8_t cbus_read_data(int is_isr);
+void cbus_write_reg(uint8_t adr, uint16_t data);
+void cbus_write_data(uint8_t data);
+uint16_t cbus_read_reg(uint8_t adr);
+uint8_t cbus_read_data(void);
 //
 void qam_monitor(int is_gse, int tic);
 void cmx_init(int is_gse);
+void cmx_service(void);
+void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len);
 void set_bell(void);
 void set_qam_call(void);
 void set_qam_answer(void);

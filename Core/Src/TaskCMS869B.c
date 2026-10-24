@@ -26,7 +26,10 @@ StreamBufferHandle_t xStreamBufferRx;
 // ****************************************************
 // タスクの実体
 #define STREAM_BUFFER_SIZE_BYTES 20
+#define CMX_POLL_MS 5
+static TaskHandle_t hTaskCMX869B = NULL;
 void TaskCMX869BEntry(void *argument) {
+    hTaskCMX869B = xTaskGetCurrentTaskHandle();
     // Stream Bufferの作成
     static uint8_t ucTxBuffer[STREAM_BUFFER_SIZE_BYTES];
     static uint8_t ucRxBuffer[STREAM_BUFFER_SIZE_BYTES];
@@ -42,75 +45,60 @@ void TaskCMX869BEntry(void *argument) {
         1, // トリガーレベル
         ucRxBuffer,
         &xStreamBufferStructRx);
-    // 変数定義
-    static int ptr = 0;
-    static uint8_t tx_data = 0x55, rx_data = 0;
     //ジャンパークローズ(0)の場合はGSE
     int is_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
 
     cmx_init(is_gse);
-    //割込の後始末
+    // 割込(ISRからの通知)またはタイムアウトで起きてステータスを処理する
+    // タイムアウトは割込の取りこぼし対策のポーリングを兼ねる
+    // CMX869BへのSPIアクセスはこのタスクだけが行う
     for (;;) {
-        //xprintf("Frank\r\n");
-        //cbus_write_data(tx_data, 0);
-        //rx_data = cbus_read_data(0);
-
-        osDelay(1000);
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(CMX_POLL_MS));
+        cmx_service();
+        HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
     }
 }
-// データ出力開始
-#define N_BUF 100
+// 送信バッファに詰めたデータの送信開始
+// TXレジスタが空のままだとTxDataReadyの割込は来ないので、タスクを起こして書かせる
 void CMX869B_flush_Tx() {
-    uint8_t tx_data;
-    /*
-    for (;;) {
-        size_t res = xStreamBufferReceive(xStreamBufferTx, &tx_data, 1, 0);
-        if (res != 1) break;
-        xprintf("FLUSH %03d\r\n", tx_data);
-        cbus_write_data(tx_data, 0);
-        osDelay(20);
-    }*/
-    size_t res = xStreamBufferReceive(xStreamBufferTx, &tx_data, 1, 0);
-    if (res == 1) {
-        cbus_write_data(tx_data, 0);
-    }
+    if (hTaskCMX869B != NULL) xTaskNotifyGive(hTaskCMX869B);
 }
+// 1文字送信(送信バッファに詰めて送信開始)
 void CMX869B_putc(uint8_t tx_data) {
-    cbus_write_data(tx_data, 0);
-    xprintf("PUTC %03d\r\n", tx_data);
+    xStreamBufferSend(xStreamBufferTx, &tx_data, 1, pdMS_TO_TICKS(100));
+    CMX869B_flush_Tx();
 }
-// 割込処理
-#define N_TX 2
+// 割込処理 (タスクに通知するだけ)
 void INT_CMX869B_ISR() {
-    static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    static uint8_t tx_data, rx_data;
-    GPIO_PinState pinState;
-    volatile static int count = 0;
-    //
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
-    do {
+    if (hTaskCMX869B != NULL) {
+        vTaskNotifyGiveFromISR(hTaskCMX869B, &xHigherPriorityTaskWoken);
+    }
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+// ステータスを読んで送受信する。割込線が戻るまで繰り返す
+#define CMX_SERVICE_MAX_LOOP 8
+void cmx_service() {
+    uint8_t tx_data, rx_data;
+    for (int i = 0; i < CMX_SERVICE_MAX_LOOP; i++) {
+        // 先にEXTIを消す。以降のエッジは保留として残り、次の通知になる
         __HAL_GPIO_EXTI_CLEAR_IT(C_INT_Pin);
-        StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 1);
-        //int_log(count++);
+        StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
         // TXレジスタがReadyなら書く
         if (StatusReg.Bits.TxDataReady == 1) {
-            tx_data = 0;
-            size_t res = xStreamBufferReceiveFromISR(
-                xStreamBufferTx, &tx_data, 1, 0);
-            if (res == 1) {
-                cbus_write_data(tx_data, 1);
+            if (xStreamBufferReceive(xStreamBufferTx, &tx_data, 1, 0) == 1) {
+                cbus_write_data(tx_data);
             }
         }
         // RXレジスタがReadyなら読む
         if (StatusReg.Bits.RxDataReady == 1) {
-            rx_data = cbus_read_data(1);
-            xStreamBufferSendFromISR(
-                xStreamBufferRx, &rx_data, 1, &xHigherPriorityTaskWoken);
+            rx_data = cbus_read_data();
+            xStreamBufferSend(xStreamBufferRx, &rx_data, 1, 0);
         }
-        //割込線が戻っていなければ再度実行
-        pinState = HAL_GPIO_ReadPin(C_INT_GPIO_Port,C_INT_Pin);
-    } while (pinState == GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+        //割込線が戻っていれば終了
+        if (HAL_GPIO_ReadPin(C_INT_GPIO_Port, C_INT_Pin) == GPIO_PIN_SET) break;
+    }
 }
 // ****************************************************
 // 分業
@@ -131,16 +119,16 @@ void cmx_init(int is_gse) {
     __HAL_SPI_ENABLE(&hspi);
 
     // グローバルリセット
-    cbus_write_reg(General_Reset_ADDR, 0, 0);
+    cbus_write_reg(General_Reset_ADDR, 0);
 
     // ステータス確認
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
 
     // Pwr=1,Rst=1で20ms以上保持して内部ロジックを確定させる(データシート GCR b8)
     // ここで水晶が発振する。
     GRE.Bits.Pwr = 1;
     GRE.Bits.Rst = 1;
-    cbus_write_reg(GRE_ADDR, GRE.Word, 0);
+    cbus_write_reg(GRE_ADDR, GRE.Word);
     HAL_Delay(25);
 
     //send_cmdで、うまくいくと22pinが発振する
@@ -151,8 +139,8 @@ void cmx_init(int is_gse) {
     GRE.Bits.Rst = 0;
     GRE.Bits.IrqEna = 1;
     GRE.Bits.IrqMask = 0b000000;
-    cbus_write_reg(GRE_ADDR, GRE.Word, 0);
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
+    cbus_write_reg(GRE_ADDR, GRE.Word);
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
     HAL_Delay(1);
 
     // モデム送受信の設定
@@ -173,21 +161,16 @@ void cmx_init(int is_gse) {
         }
     }
     GRE.Bits.IrqMask = 0b001001;
-    cbus_write_reg(GRE_ADDR, GRE.Word, 0);
+    cbus_write_reg(GRE_ADDR, GRE.Word);
     xprintf("Initialized\r\n");
 }
 
 // ==========================================
 // C-BUS操作関数
 // ==========================================
-void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len, int is_isr) {
+// TaskCMX869Bからのみ呼ぶこと(ISR・他タスクからは呼ばない)
+void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len) {
     //CS Low
-    UBaseType_t s = 0;
-    if (is_isr != 1) {
-        taskENTER_CRITICAL();
-    } else {
-        s = taskENTER_CRITICAL_FROM_ISR();
-    }
     C_CS_GPIO_Port->BSRR = C_CS_Pin << 16;
     // 2. 3バイト分をダイレクトに送受信する（例としてSPI1を使用）
     for (int i = 0; i < len; i++) {
@@ -203,42 +186,37 @@ void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len, int is
     }
     //CS High
     C_CS_GPIO_Port->BSRR = C_CS_Pin;
-    if (is_isr != 1) {
-        taskEXIT_CRITICAL();
-    } else {
-        taskEXIT_CRITICAL_FROM_ISR(s);
-    }
 }
 
-void cbus_write_reg(uint8_t adr, uint16_t data, int is_isr) {
+void cbus_write_reg(uint8_t adr, uint16_t data) {
     uint8_t tx_data[3], rx_data[3];
     tx_data[0] = adr;
     tx_data[1] = (data >> 8) & 0xFF;
     tx_data[2] = (data >> 0) & 0xFF;
-    cbus_read_write(tx_data, rx_data, 3, is_isr);
+    cbus_read_write(tx_data, rx_data, 3);
 }
 
-uint16_t cbus_read_reg(uint8_t adr, int is_isr) {
+uint16_t cbus_read_reg(uint8_t adr) {
     uint8_t tx_data[3], rx_data[3];
     tx_data[0] = adr;
     tx_data[1] = tx_data[2] = 0x0;
-    cbus_read_write(tx_data, rx_data, 3, is_isr);
+    cbus_read_write(tx_data, rx_data, 3);
     uint16_t result = (rx_data[1] << 8) + rx_data[2];
     return result;
 }
 
-void cbus_write_data(uint8_t data, int is_isr) {
+void cbus_write_data(uint8_t data) {
     uint8_t tx_data[2], rx_data[2];
     tx_data[0] = TxData_ADDR;
     tx_data[1] = data;
-    cbus_read_write(tx_data, rx_data, 2, is_isr);
+    cbus_read_write(tx_data, rx_data, 2);
 }
 
-uint8_t cbus_read_data(int is_isr) {
+uint8_t cbus_read_data(void) {
     uint8_t tx_data[2], rx_data[2];
     tx_data[0] = RxData_ADDR;
     tx_data[1] = 0x0;
-    cbus_read_write(tx_data, rx_data, 2, is_isr);
+    cbus_read_write(tx_data, rx_data, 2);
     return rx_data[1];
 }
 
@@ -255,7 +233,7 @@ void int_log(int count) {
 }
 
 void qam_monitor(int is_gse, int tic) {
-    QamStatusReg.Word = cbus_read_reg(QamStatusReg_ADDR, 0);
+    QamStatusReg.Word = cbus_read_reg(QamStatusReg_ADDR);
     xprintf("GSE:%d TI:%03d MSG:%02X SNR:%02X MODE:%02X\r\n",
             is_gse,
             tic, QamStatusReg.Bits.Messages,
@@ -278,15 +256,15 @@ void set_bell() {
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
     //TxReg.Bits.StartStop = 0b11; //Special Mode
     //TxReg.Bits.DataBits = 0b110; //HDLC Mode
-    cbus_write_reg(TxReg_ADDR, TxReg.Word, 0);
+    cbus_write_reg(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_BELL;
     RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
-    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
+    RxReg.Bits.BitsParity = 0b110; //8bit, NonParity (0b111は8bit+Parity)
     //RxReg.Bits.StartStop_Synch = 0b111; //Special Mode
     //RxReg.Bits.BitsParity = 0b110; //HDLC Mode
-    cbus_write_reg(RxReg_ADDR, RxReg.Word, 0);
+    cbus_write_reg(RxReg_ADDR, RxReg.Word);
 }
 
 // AutoModem ネゴシエーション必須
@@ -296,21 +274,21 @@ void set_qam_answer() {
     TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    cbus_write_reg(TxReg_ADDR, TxReg.Word, 0);
+    cbus_write_reg(TxReg_ADDR, TxReg.Word);
     HAL_Delay(10);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
-    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    cbus_write_reg(RxReg_ADDR, RxReg.Word, 0);
+    RxReg.Bits.BitsParity = 0b110; //8bit, NonParity (0b111は8bit+Parity)
+    cbus_write_reg(RxReg_ADDR, RxReg.Word);
     HAL_Delay(10);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
     //QamReg.Bits.br = QamMaxBR_2400;
     QamReg.Bits.command = QamAnswer;
     QamReg.Bits.zeros = QamZeros;
-    cbus_write_reg(QamCmdReg_ADDR, QamReg.Word, 0);
+    cbus_write_reg(QamCmdReg_ADDR, QamReg.Word);
     HAL_Delay(10);
 }
 
@@ -320,21 +298,21 @@ void set_qam_call() {
     TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
     TxReg.Bits.DataBits = 0b110; //8bit Stop1
-    cbus_write_reg(TxReg_ADDR, TxReg.Word, 0);
+    cbus_write_reg(TxReg_ADDR, TxReg.Word);
     HAL_Delay(10);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.RxLevel = RX_LEVEL;
     RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
-    RxReg.Bits.BitsParity = 0b111; //8bit, NonParity
-    cbus_write_reg(RxReg_ADDR, RxReg.Word, 0);
+    RxReg.Bits.BitsParity = 0b110; //8bit, NonParity (0b111は8bit+Parity)
+    cbus_write_reg(RxReg_ADDR, RxReg.Word);
     HAL_Delay(10);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
     //QamReg.Bits.br = QamMaxBR_2400;
     QamReg.Bits.command = QamCall;
     QamReg.Bits.zeros = QamZeros;
-    cbus_write_reg(QamCmdReg_ADDR, QamReg.Word, 0);
+    cbus_write_reg(QamCmdReg_ADDR, QamReg.Word);
     HAL_Delay(10);
 }
 

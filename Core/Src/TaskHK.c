@@ -20,43 +20,24 @@ void TaskHKEntry(void *argument) {
         xprintf("Zap:\r\n");
         // バッファクリアと送信
         xStreamBufferReset(xStreamBufferTx);
-        xStreamBufferReset(xStreamBufferRx);
-
         //タスクから一文字
-        for (uint8_t i = 10; i < 12; i++) {
-            CMX869B_putc(i);
-            osDelay(800);
-        }
         /*
-        //データをセット
+        for (uint8_t i = 10; i < 20; i++) {
+            CMX869B_putc(i);
+            osDelay(20);
+        }*/
+        //ストリームバッファにデータを詰める
         for (int i = 0; i < 10; i++) {
             tx_data =   i;
-            //CMX869B_putc(tx_data);
-            osDelay(1);
             xStreamBufferSend(xStreamBufferTx, &tx_data, 1, 0);
         }
-        //タスクから送ってみる
-        for (;;) {
-            uint8_t cc = 0x00;
-            size_t res = xStreamBufferReceive(
-                xStreamBufferTx, &cc, 1, 0);
-            if (res == 1) {
-                CMX869B_putc(cc);
-                osDelay(100);
-            } else {
-                break;
-            }
-        }
-        //CMX869B_flush_Tx();
-        // 待機
-        //CMX869B_flush_Tx();
-        */
-        //osDelay(500);
+        CMX869B_flush_Tx();
+        osDelay(500);
         // 読んでみる
         for (;;) {
             rx_data = 0x00;
             size_t res = xStreamBufferReceive(
-                xStreamBufferRx, &rx_data, 1, 0);
+                xStreamBufferRx, &rx_data, 1, pdMS_TO_TICKS(50));  // 1バイト分より長く待つ
             if (res == 1) {
                 xprintf("%03d ", rx_data);
             } else {
@@ -64,6 +45,7 @@ void TaskHKEntry(void *argument) {
                 break;
             }
         }
+        xStreamBufferReset(xStreamBufferRx);
         num++;
         // 1秒待機
         vTaskDelayUntil(&xLastWakeTime, xFrequency);

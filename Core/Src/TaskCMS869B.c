@@ -33,15 +33,15 @@ void TaskCMX869BEntry(void *argument) {
     static StaticStreamBuffer_t xStreamBufferStructTx;
     static StaticStreamBuffer_t xStreamBufferStructRx;
     xStreamBufferTx = xStreamBufferCreateStatic(
-                          STREAM_BUFFER_SIZE_BYTES,
-                          1, // トリガーレベル
-                          ucTxBuffer,
-                          &xStreamBufferStructTx);
+        STREAM_BUFFER_SIZE_BYTES,
+        1, // トリガーレベル
+        ucTxBuffer,
+        &xStreamBufferStructTx);
     xStreamBufferRx = xStreamBufferCreateStatic(
-                          STREAM_BUFFER_SIZE_BYTES,
-                          1, // トリガーレベル
-                          ucRxBuffer,
-                          &xStreamBufferStructRx);
+        STREAM_BUFFER_SIZE_BYTES,
+        1, // トリガーレベル
+        ucRxBuffer,
+        &xStreamBufferStructRx);
     // 変数定義
     static int ptr = 0;
     static uint8_t tx_data = 0x55, rx_data = 0;
@@ -60,21 +60,20 @@ void TaskCMX869BEntry(void *argument) {
 }
 // データ出力開始
 #define N_BUF 100
-volatile static int TxPtr = 0, RxPtr = 0, StPtr = 0;
-static uint8_t TxBuf[N_BUF], RxBuf[N_BUF];
-static StatusRegType StBuf[N_BUF];
 void CMX869B_flush_Tx() {
     uint8_t tx_data;
     /*
     for (;;) {
-        //CMX869B_putc(tx_data);
-        osDelay(1);
         size_t res = xStreamBufferReceive(xStreamBufferTx, &tx_data, 1, 0);
         if (res != 1) break;
-        //xprintf("Received: %d %d\r\n", res, tx_data);
+        xprintf("FLUSH %03d\r\n", tx_data);
         cbus_write_data(tx_data, 0);
-        osDelay(1);
+        osDelay(20);
     }*/
+    size_t res = xStreamBufferReceive(xStreamBufferTx, &tx_data, 1, 0);
+    if (res == 1) {
+        cbus_write_data(tx_data, 0);
+    }
 }
 void CMX869B_putc(uint8_t tx_data) {
     cbus_write_data(tx_data, 0);
@@ -90,8 +89,9 @@ void INT_CMX869B_ISR() {
     //
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
     do {
+        __HAL_GPIO_EXTI_CLEAR_IT(C_INT_Pin);
         StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 1);
-        int_log(count++);
+        //int_log(count++);
         // TXレジスタがReadyなら書く
         if (StatusReg.Bits.TxDataReady == 1) {
             tx_data = 0;
@@ -111,7 +111,6 @@ void INT_CMX869B_ISR() {
         pinState = HAL_GPIO_ReadPin(C_INT_GPIO_Port,C_INT_Pin);
     } while (pinState == GPIO_PIN_RESET);
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
-    __HAL_GPIO_EXTI_CLEAR_IT(C_INT_Pin);
 }
 // ****************************************************
 // 分業
@@ -173,7 +172,7 @@ void cmx_init(int is_gse) {
             qam_monitor(is_gse, tic);
         }
     }
-    GRE.Bits.IrqMask = 0b000001;
+    GRE.Bits.IrqMask = 0b001001;
     cbus_write_reg(GRE_ADDR, GRE.Word, 0);
     xprintf("Initialized\r\n");
 }
@@ -183,7 +182,12 @@ void cmx_init(int is_gse) {
 // ==========================================
 void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len, int is_isr) {
     //CS Low
-    if (is_isr != 1) vTaskSuspendAll();
+    UBaseType_t s = 0;
+    if (is_isr != 1) {
+        taskENTER_CRITICAL();
+    } else {
+        s = taskENTER_CRITICAL_FROM_ISR();
+    }
     C_CS_GPIO_Port->BSRR = C_CS_Pin << 16;
     // 2. 3バイト分をダイレクトに送受信する（例としてSPI1を使用）
     for (int i = 0; i < len; i++) {
@@ -199,11 +203,15 @@ void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len, int is
     }
     //CS High
     C_CS_GPIO_Port->BSRR = C_CS_Pin;
-    if (is_isr != 1) xTaskResumeAll();
+    if (is_isr != 1) {
+        taskEXIT_CRITICAL();
+    } else {
+        taskEXIT_CRITICAL_FROM_ISR(s);
+    }
 }
 
 void cbus_write_reg(uint8_t adr, uint16_t data, int is_isr) {
-    static uint8_t tx_data[3], rx_data[3];
+    uint8_t tx_data[3], rx_data[3];
     tx_data[0] = adr;
     tx_data[1] = (data >> 8) & 0xFF;
     tx_data[2] = (data >> 0) & 0xFF;
@@ -211,7 +219,7 @@ void cbus_write_reg(uint8_t adr, uint16_t data, int is_isr) {
 }
 
 uint16_t cbus_read_reg(uint8_t adr, int is_isr) {
-    static uint8_t tx_data[3], rx_data[3];
+    uint8_t tx_data[3], rx_data[3];
     tx_data[0] = adr;
     tx_data[1] = tx_data[2] = 0x0;
     cbus_read_write(tx_data, rx_data, 3, is_isr);
@@ -220,14 +228,14 @@ uint16_t cbus_read_reg(uint8_t adr, int is_isr) {
 }
 
 void cbus_write_data(uint8_t data, int is_isr) {
-    static uint8_t tx_data[2], rx_data[2];
+    uint8_t tx_data[2], rx_data[2];
     tx_data[0] = TxData_ADDR;
     tx_data[1] = data;
     cbus_read_write(tx_data, rx_data, 2, is_isr);
 }
 
 uint8_t cbus_read_data(int is_isr) {
-    static uint8_t tx_data[2], rx_data[2];
+    uint8_t tx_data[2], rx_data[2];
     tx_data[0] = RxData_ADDR;
     tx_data[1] = 0x0;
     cbus_read_write(tx_data, rx_data, 2, is_isr);

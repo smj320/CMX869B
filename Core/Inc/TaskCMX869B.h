@@ -13,6 +13,7 @@ extern StreamBufferHandle_t xStreamBufferRx;
 
 void TaskCMX869BEntry(void *argument);
 void INT_CMX869B_ISR(void);
+void CMX869B_putc(uint8_t tx_data);
 void CMX869B_flush_Tx();
 
 void uart_putc(unsigned char c);

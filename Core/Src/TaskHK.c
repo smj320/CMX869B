@@ -17,29 +17,32 @@ void TaskHKEntry(void *argument) {
     TickType_t xLastWakeTime = xTaskGetTickCount();
     for (;;) {
         xprintf("Zap:\r\n");
-        /*
         // バッファクリアと送信
         xStreamBufferReset(xStreamBufferTx);
+        xStreamBufferReset(xStreamBufferRx);
         for (int i = 0; i < 10; i++) {
             uint8_t tx_data = num % 10 + i;
             xStreamBufferSend(xStreamBufferTx, &tx_data, 1, 0);
         }
-        CMX869B_flush_Tx();
+        CMX869B_putc(1);
+        osDelay(100);
+        CMX869B_putc(2);
+        osDelay(100);
+        CMX869B_putc(3);
         // 待機
         osDelay(500);
         // 読んでみる
         for (;;) {
-            /*
             uint8_t rx_data = 0x00;
             size_t res = xStreamBufferReceive(
                 xStreamBufferRx, &rx_data, 1, 0);
             if (res == 1) {
                 xprintf("%03d ", rx_data);
-            }else {
+            } else {
                 xprintf("\r\n");
                 break;
-            }*/
-        CMX869B_flush_Tx();
+            }
+        }
         num++;
         // 1秒待機
         vTaskDelayUntil(&xLastWakeTime, xFrequency);

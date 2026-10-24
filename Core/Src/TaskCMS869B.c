@@ -42,49 +42,60 @@ void TaskCMX869BEntry(void *argument) {
         osDelay(1000);
     }
 }
+// データ出力開始
+#define N_BUF 100
+volatile static int TxPtr = 0, RxPtr = 0, StPtr = 0;
+static uint8_t TxBuf[N_BUF], RxBuf[N_BUF];
+static StatusRegType StBuf[N_BUF];
+void CMX869B_flush_Tx() {
+    TxPtr =  RxPtr = StPtr = 0;
+    memset(TxBuf, 0, sizeof(TxBuf));
+    memset(RxBuf, 0, sizeof(RxBuf));
+    memset(StBuf, 0, sizeof(StBuf));
+    cbus_write_data(0x03, 0);
+}
+void CMX869B_putc(uint8_t tx_data) {
+    cbus_write_data(tx_data, 1);
+}
 // 割込処理
-volatile static int TxPtr = 0;
+#define N_TX 4
 void INT_CMX869B_ISR() {
     static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     static uint8_t tx_data, rx_data;
     GPIO_PinState pinState;
-    uint8_t TxBuf[10], RxBuf[10], RxPtr = 0;
+    volatile static int key=0;
     //
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
     do {
         StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 1);
+        if (StPtr<N_BUF) StBuf[StPtr++] = StatusReg;
+        if (StatusReg.Bits.TxDataReady == 1) {
+            if (StatusReg.Bits.TxDataUnderflow == 0) {
+                if (TxPtr <  N_TX ) {
+                    tx_data = TxPtr;
+                    if (TxPtr < N_BUF) TxBuf[TxPtr] = tx_data;
+                    cbus_write_data(tx_data, 1);
+                    TxPtr++;
+                }
+            }
+        }
         if (StatusReg.Bits.RxDataReady == 1) {
             rx_data = cbus_read_data(1);
-            RxBuf[RxPtr++ % 10] = rx_data;
-            xStreamBufferSendFromISR(
-                xStreamBufferRx, &rx_data, 1, &xHigherPriorityTaskWoken);
-        }
-        if (StatusReg.Bits.TxDataReady == 1) {
-            if (TxPtr < 10) {
-                tx_data = TxPtr;
-                cbus_write_data(tx_data, 1);
-                TxBuf[TxPtr] = tx_data;
-                TxPtr++;
+            if (StatusReg.Bits.RxDataOverflow == 0) {
+                //rx_data = RxPtr;
+                if (RxPtr<N_BUF) RxBuf[RxPtr++] = rx_data;
+                xStreamBufferSendFromISR(
+                    xStreamBufferRx, &rx_data, 1, &xHigherPriorityTaskWoken);
             }
         }
         //割込線が戻っていなければ再度実行
+        L1:;
         pinState = HAL_GPIO_ReadPin(C_INT_GPIO_Port,C_INT_Pin);
     } while (pinState == GPIO_PIN_RESET);
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
-}
-
-// データ出力開始
-void CMX869B_flush_Tx() {
-    TxPtr = 0;
-    cbus_write_data(0x03, 0);
-    /*
-    uint8_t c = 0;
-    size_t res = xStreamBufferReceive(
-        xStreamBufferTx, &c, sizeof(c), 0);
-    if (res != 0) {
-        cbus_write_data(c, 0);
-    }
-    */
+    if (RxPtr==N_TX-1) {
+        key=1;
+    };
 }
 // ****************************************************
 // 分業
@@ -149,7 +160,7 @@ void cmx_init(int is_gse) {
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
     c = cbus_read_data(0);
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
-    GRE.Bits.IrqMask = 0b001001;
+    GRE.Bits.IrqMask = 0b000001;
     cbus_write_reg(GRE_ADDR, GRE.Word, 0);
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
     xprintf("Initialized\r\n");

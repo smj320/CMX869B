@@ -146,10 +146,11 @@ void cmx_init(int is_gse) {
             qam_monitor(is_gse, tic);
         }
     }
-    //StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
-    //c = cbus_read_data(0);
-    //StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
+    c = cbus_read_data(0);
+    StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
     GRE.Bits.IrqMask = 0b001001;
+    cbus_write_reg(GRE_ADDR, GRE.Word, 0);
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
     xprintf("Initialized\r\n");
 }

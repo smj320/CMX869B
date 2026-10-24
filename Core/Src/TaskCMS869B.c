@@ -25,13 +25,29 @@ StreamBufferHandle_t xStreamBufferRx;
 // Externで外部に出す関数
 // ****************************************************
 // タスクの実体
+#define STREAM_BUFFER_SIZE_BYTES 20
 void TaskCMX869BEntry(void *argument) {
+    // Stream Bufferの作成
+    static uint8_t ucTxBuffer[STREAM_BUFFER_SIZE_BYTES];
+    static uint8_t ucRxBuffer[STREAM_BUFFER_SIZE_BYTES];
+    static StaticStreamBuffer_t xStreamBufferStructTx;
+    static StaticStreamBuffer_t xStreamBufferStructRx;
+    xStreamBufferTx = xStreamBufferCreateStatic(
+                          STREAM_BUFFER_SIZE_BYTES,
+                          1, // トリガーレベル
+                          ucTxBuffer,
+                          &xStreamBufferStructTx);
+    xStreamBufferRx = xStreamBufferCreateStatic(
+                          STREAM_BUFFER_SIZE_BYTES,
+                          1, // トリガーレベル
+                          ucRxBuffer,
+                          &xStreamBufferStructRx);
+    // 変数定義
     static int ptr = 0;
     static uint8_t tx_data = 0x55, rx_data = 0;
     //ジャンパークローズ(0)の場合はGSE
     int is_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
-    xStreamBufferRx = xStreamBufferCreate(10, 1);
-    xStreamBufferTx = xStreamBufferCreate(10, 1);
+
     cmx_init(is_gse);
     //割込の後始末
     for (;;) {
@@ -48,54 +64,54 @@ volatile static int TxPtr = 0, RxPtr = 0, StPtr = 0;
 static uint8_t TxBuf[N_BUF], RxBuf[N_BUF];
 static StatusRegType StBuf[N_BUF];
 void CMX869B_flush_Tx() {
-    TxPtr =  RxPtr = StPtr = 0;
-    memset(TxBuf, 0, sizeof(TxBuf));
-    memset(RxBuf, 0, sizeof(RxBuf));
-    memset(StBuf, 0, sizeof(StBuf));
-    cbus_write_data(0x03, 0);
+    uint8_t tx_data;
+    /*
+    for (;;) {
+        //CMX869B_putc(tx_data);
+        osDelay(1);
+        size_t res = xStreamBufferReceive(xStreamBufferTx, &tx_data, 1, 0);
+        if (res != 1) break;
+        //xprintf("Received: %d %d\r\n", res, tx_data);
+        cbus_write_data(tx_data, 0);
+        osDelay(1);
+    }*/
 }
 void CMX869B_putc(uint8_t tx_data) {
-    cbus_write_data(tx_data, 1);
+    cbus_write_data(tx_data, 0);
+    xprintf("PUTC %03d\r\n", tx_data);
 }
 // 割込処理
-#define N_TX 4
+#define N_TX 2
 void INT_CMX869B_ISR() {
     static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     static uint8_t tx_data, rx_data;
     GPIO_PinState pinState;
-    volatile static int key=0;
+    volatile static int count = 0;
     //
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
     do {
         StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 1);
-        if (StPtr<N_BUF) StBuf[StPtr++] = StatusReg;
+        int_log(count++);
+        // TXレジスタがReadyなら書く
         if (StatusReg.Bits.TxDataReady == 1) {
-            if (StatusReg.Bits.TxDataUnderflow == 0) {
-                if (TxPtr <  N_TX ) {
-                    tx_data = TxPtr;
-                    if (TxPtr < N_BUF) TxBuf[TxPtr] = tx_data;
-                    cbus_write_data(tx_data, 1);
-                    TxPtr++;
-                }
+            tx_data = 0;
+            size_t res = xStreamBufferReceiveFromISR(
+                xStreamBufferTx, &tx_data, 1, 0);
+            if (res == 1) {
+                cbus_write_data(tx_data, 1);
             }
         }
+        // RXレジスタがReadyなら読む
         if (StatusReg.Bits.RxDataReady == 1) {
             rx_data = cbus_read_data(1);
-            if (StatusReg.Bits.RxDataOverflow == 0) {
-                //rx_data = RxPtr;
-                if (RxPtr<N_BUF) RxBuf[RxPtr++] = rx_data;
-                xStreamBufferSendFromISR(
-                    xStreamBufferRx, &rx_data, 1, &xHigherPriorityTaskWoken);
-            }
+            xStreamBufferSendFromISR(
+                xStreamBufferRx, &rx_data, 1, &xHigherPriorityTaskWoken);
         }
         //割込線が戻っていなければ再度実行
-        L1:;
         pinState = HAL_GPIO_ReadPin(C_INT_GPIO_Port,C_INT_Pin);
     } while (pinState == GPIO_PIN_RESET);
     HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
-    if (RxPtr==N_TX-1) {
-        key=1;
-    };
+    __HAL_GPIO_EXTI_CLEAR_IT(C_INT_Pin);
 }
 // ****************************************************
 // 分業
@@ -157,12 +173,8 @@ void cmx_init(int is_gse) {
             qam_monitor(is_gse, tic);
         }
     }
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
-    c = cbus_read_data(0);
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
     GRE.Bits.IrqMask = 0b000001;
     cbus_write_reg(GRE_ADDR, GRE.Word, 0);
-    StatusReg.Word = cbus_read_reg(StatusReg_ADDR, 0);
     xprintf("Initialized\r\n");
 }
 

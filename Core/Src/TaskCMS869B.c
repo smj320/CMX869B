@@ -26,7 +26,7 @@ int Is_gse_mode = 0;
 // Externで外部に出す関数
 // ****************************************************
 // タスクの実体
-#define STREAM_BUFFER_SIZE_BYTES 20
+#define PKT_QUEUE_DEPTH 4
 #define CMX_POLL_MS 5
 #define CMX_QAM_STATUS_MS 200
 static TaskHandle_t hTaskCMX869B = NULL;
@@ -35,9 +35,9 @@ static volatile uint16_t qam_status_word = 0;
 
 void TaskCMX869BEntry(void *argument) {
     hTaskCMX869B = xTaskGetCurrentTaskHandle();
-    // Stream Bufferの作成
-    xQueueTx = xQueueCreate(TX_BUF_SIZE, sizeof(uint8_t));
-    xQueueRx = xQueueCreate(RX_BUF_SIZE, sizeof(uint8_t));
+    // パケット単位のキューの作成(1要素 = 1パケット)
+    xQueueTx = xQueueCreate(PKT_QUEUE_DEPTH, TX_BUF_SIZE);
+    xQueueRx = xQueueCreate(PKT_QUEUE_DEPTH, RX_BUF_SIZE);
 
     //ジャンパークローズ(0)の場合はGSE
     Is_gse_mode = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
@@ -125,7 +125,6 @@ void cmx_service() {
             }
             //ポインタが端までいっていなければ送信
             if (txPtr < TX_BUF_SIZE) {
-                xprintf("TX %d %d\r\n",txPtr,tx_buf[txPtr]);
                 cbus_write_data(tx_buf[txPtr++]);
             }
         }
@@ -140,7 +139,6 @@ void cmx_service() {
             }
             //パケットが終了ならキューに書き込んでrxPtr=0に戻す
             if (StatusReg.Bits.FCS==1) {
-                memset(rx_buf, 1, RX_BUF_SIZE);
                 xQueueSend(xQueueRx, rx_buf, 0);
                 rxPtr = 0;
             }

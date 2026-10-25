@@ -12,14 +12,15 @@
 // 各種バッファサイズ
 // ***********************************************************
 #define CMX_SERVICE_MAX_LOOP 8
-#define RX_BUF_SIZE 10
 #define TX_BUF_SIZE 10
+#define RX_BUF_SIZE 12
+
 
 // ***********************************************************
 // 変数
 // ***********************************************************
-extern QueueHandle_t xTxQueue;
-extern QueueHandle_t xRxQueue;
+extern QueueHandle_t xQueueTx;
+extern QueueHandle_t xQueueRx;
 extern int Is_gse_mode;
 
 // ***********************************************************

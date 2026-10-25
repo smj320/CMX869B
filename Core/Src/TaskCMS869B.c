@@ -17,8 +17,8 @@ RxRegType RxReg = {0};
 QamRegType QamReg = {0};
 QamStatusRegType QamStatusReg = {0};
 
-QueueHandle_t xTxQueue = NULL;
-QueueHandle_t xRxQueue = NULL;
+QueueHandle_t xQueueTx = NULL;
+QueueHandle_t xQueueRx = NULL;
 
 int Is_gse_mode = 0;
 
@@ -36,8 +36,8 @@ static volatile uint16_t qam_status_word = 0;
 void TaskCMX869BEntry(void *argument) {
     hTaskCMX869B = xTaskGetCurrentTaskHandle();
     // Stream Bufferの作成
-    xTxQueue = xQueueCreate(TX_BUF_SIZE, sizeof(uint8_t));
-    xRxQueue = xQueueCreate(RX_BUF_SIZE, sizeof(uint8_t));
+    xQueueTx = xQueueCreate(TX_BUF_SIZE, sizeof(uint8_t));
+    xQueueRx = xQueueCreate(RX_BUF_SIZE, sizeof(uint8_t));
 
     //ジャンパークローズ(0)の場合はGSE
     Is_gse_mode = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
@@ -66,6 +66,9 @@ void TaskCMX869BEntry(void *argument) {
     }
 }
 
+// ********************************************************
+// 公開関数
+// ********************************************************
 // QAMステータスの取得(TaskCMX869Bが定期的に読んだ値のコピーを返す。SPIアクセスはしない)
 void CMX869B_get_qam_status(uint8_t *mode, uint8_t *snr, uint8_t *msg) {
     QamStatusRegType s;
@@ -81,9 +84,12 @@ void CMX869B_flush_Tx() {
 }
 // 1文字送信(送信バッファに詰めて送信開始)
 void CMX869B_putc(uint8_t tx_data) {
+    cbus_write_data(tx_data);
     CMX869B_flush_Tx();
 }
+// --------------------------------------------------
 // 割込処理 (タスクに通知するだけ)
+// --------------------------------------------------
 void INT_CMX869B_ISR() {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     if (hTaskCMX869B != NULL) {
@@ -93,10 +99,10 @@ void INT_CMX869B_ISR() {
 }
 // ステータスを読んで送受信する。割込線が戻るまで繰り返す
 void cmx_service() {
-    uint8_t tx_buf[TX_BUF_SIZE]={0};
-    uint8_t rx_buf[RX_BUF_SIZE]={0};
+    static uint8_t tx_buf[TX_BUF_SIZE];
+    static uint8_t rx_buf[RX_BUF_SIZE];
     static int txPtr=TX_BUF_SIZE, rxPtr=RX_BUF_SIZE;
-    uint8_t tx_data, rx_data;
+    uint8_t rx_data;
     // ------------------------
     // 割込通知後の処理
     // ------------------------
@@ -108,17 +114,18 @@ void cmx_service() {
         __HAL_GPIO_EXTI_CLEAR_IT(C_INT_Pin);
         StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
         // ------------------------
-        // TXレジスタがReadyなら書く
+        // TXレジスタがReadyならデバイスに書く
         // ------------------------
         if (StatusReg.Bits.TxDataReady == 1) {
             //txPtrが端まで言っていたらキューの有無をしらべて、txPtr=0にする
             if (txPtr == TX_BUF_SIZE) {
-                if (xQueueReceive(xTxQueue,&tx_data, 0) == pdPASS) {
+                if (xQueueReceive(xQueueTx,tx_buf, 0) == pdPASS) {
                     txPtr = 0;
                 }
             }
             //ポインタが端までいっていなければ送信
-            if (txPtr++ < TX_BUF_SIZE) {
+            if (txPtr < TX_BUF_SIZE) {
+                xprintf("TX %d %d\r\n",txPtr,tx_buf[txPtr]);
                 cbus_write_data(tx_buf[txPtr++]);
             }
         }
@@ -128,12 +135,13 @@ void cmx_service() {
         if (StatusReg.Bits.RxDataReady == 1) {
             rx_data = cbus_read_data();
             //ポインタが端までいっていなければバッファに書く
-            if (rxPtr++<RX_BUF_SIZE) {
+            if (rxPtr<RX_BUF_SIZE) {
                 rx_buf[rxPtr++] = rx_data;
             }
             //パケットが終了ならキューに書き込んでrxPtr=0に戻す
             if (StatusReg.Bits.FCS==1) {
-                xQueueSend(xRxQueue, rx_buf, 0);
+                memset(rx_buf, 1, RX_BUF_SIZE);
+                xQueueSend(xQueueRx, rx_buf, 0);
                 rxPtr = 0;
             }
         }
@@ -147,12 +155,11 @@ void cmx_service() {
 // 分業
 // ****************************************************
 //-----------------
-//初期化
+// 初期化
 //-----------------
 void cmx_init(int is_gse_mode) {
     static int is_loop_back = 1;
     static int is_Cal = 0;
-    static uint8_t c = 0;
 
     // 動作モード選択
     is_loop_back = 0;

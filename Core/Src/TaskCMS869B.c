@@ -262,18 +262,18 @@ void set_bell() {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_BELL;
     TxReg.Bits.TxLevel = TX_LEVEL;
-    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
-    TxReg.Bits.DataBits = 0b111; //8bit Stop2
-    //TxReg.Bits.StartStop = 0b11; //Special Mode
-    //TxReg.Bits.DataBits = 0b110; //HDLC Mode
+    //TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
+    //TxReg.Bits.DataBits = 0b111; //8bit Stop2
+    TxReg.Bits.StartStop = 0b11; //Special Mode
+    TxReg.Bits.DataBits = 0b110; //HDLC Mode
     cbus_write_reg(TxReg_ADDR, TxReg.Word);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_BELL;
     RxReg.Bits.RxLevel = RX_LEVEL;
-    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
-    RxReg.Bits.BitsParity = 0b110; //8bit, NonParity (0b111は8bit+Parity)
-    //RxReg.Bits.StartStop_Synch = 0b111; //Special Mode
-    //RxReg.Bits.BitsParity = 0b110; //HDLC Mode
+    //RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
+    //RxReg.Bits.BitsParity = 0b110; //8bit, NonParity (0b111は8bit+Parity)
+    RxReg.Bits.StartStop_Synch = 0b111; //Special Mode
+    RxReg.Bits.BitsParity = 0b110; //HDLC Mode
     cbus_write_reg(RxReg_ADDR, RxReg.Word);
 }
 
@@ -282,15 +282,19 @@ void set_qam_answer() {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_QAM_AUTO;
     TxReg.Bits.TxLevel = TX_LEVEL;
-    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
-    TxReg.Bits.DataBits = 0b111; //8bit Stop2 (Stop1で文字が隙間なく連続すると相手側で化けるため)
+    //TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
+    //TxReg.Bits.DataBits = 0b111; //8bit Stop2 (Stop1で文字が隙間なく連続すると相手側で化けるため)
+    TxReg.Bits.StartStop = 0b11; //Special Mode
+    TxReg.Bits.DataBits = 0b110; //HDLC Mode
     cbus_write_reg(TxReg_ADDR, TxReg.Word);
     HAL_Delay(10);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.RxLevel = RX_LEVEL;
-    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
-    RxReg.Bits.BitsParity = 0b110; //8bit, NonParity (0b111は8bit+Parity)
+    //RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
+    //RxReg.Bits.BitsParity = 0b110; //8bit, NonParity (0b111は8bit+Parity)
+    RxReg.Bits.StartStop_Synch = 0b111; //Special Mode
+    RxReg.Bits.BitsParity = 0b110; //HDLC Mode
     cbus_write_reg(RxReg_ADDR, RxReg.Word);
     HAL_Delay(10);
     //QAM
@@ -308,15 +312,19 @@ void set_qam_call() {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_QAM_AUTO;
     TxReg.Bits.TxLevel = TX_LEVEL;
-    TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
-    TxReg.Bits.DataBits = 0b111; //8bit Stop2 (Stop1で文字が隙間なく連続すると相手側で化けるため)
+    //TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
+    //TxReg.Bits.DataBits = 0b111; //8bit Stop2 (Stop1で文字が隙間なく連続すると相手側で化けるため)
+    TxReg.Bits.StartStop = 0b11; //Special Mode
+    TxReg.Bits.DataBits = 0b110; //HDLC Mode
     cbus_write_reg(TxReg_ADDR, TxReg.Word);
     HAL_Delay(10);
     // RX
     RxReg.Bits.RxMode = RxReg_Mode_QAM_AUTO;
     RxReg.Bits.RxLevel = RX_LEVEL;
-    RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
-    RxReg.Bits.BitsParity = 0b110; //8bit, NonParity (0b111は8bit+Parity)
+    //RxReg.Bits.StartStop_Synch = 0b110; //Start-stop, NonOverSpeed
+    //RxReg.Bits.BitsParity = 0b110; //8bit, NonParity (0b111は8bit+Parity)
+    RxReg.Bits.StartStop_Synch = 0b111; //Special Mode
+    RxReg.Bits.BitsParity = 0b110; //HDLC Mode
     cbus_write_reg(RxReg_ADDR, RxReg.Word);
     HAL_Delay(10);
     //QAM

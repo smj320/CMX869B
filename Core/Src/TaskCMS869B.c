@@ -7,7 +7,6 @@
 #include "task.h"
 #include "stm32f3xx_hal.h"
 #include "xprintf.h"
-#include "stream_buffer.h"
 #include "TaskCMX869B.h"
 #include "TaskCMX869B_priv.h"
 
@@ -18,10 +17,10 @@ RxRegType RxReg = {0};
 QamRegType QamReg = {0};
 QamStatusRegType QamStatusReg = {0};
 
-StreamBufferHandle_t xStreamBufferTx;
-StreamBufferHandle_t xStreamBufferRx;
+QueueHandle_t xTxQueue = NULL;
+QueueHandle_t xRxQueue = NULL;
 
-int Is_gse = 0;
+int Is_gse_mode = 0;
 
 // ****************************************************
 // Externで外部に出す関数
@@ -33,21 +32,29 @@ int Is_gse = 0;
 static TaskHandle_t hTaskCMX869B = NULL;
 // 他タスク参照用のQAMステータスのコピー(16bitなので読み書きはアトミック)
 static volatile uint16_t qam_status_word = 0;
+
 void TaskCMX869BEntry(void *argument) {
     hTaskCMX869B = xTaskGetCurrentTaskHandle();
     // Stream Bufferの作成
-    xStreamBufferTx = xStreamBufferCreate(STREAM_BUFFER_SIZE_BYTES,0);
-    xStreamBufferRx = xStreamBufferCreate(STREAM_BUFFER_SIZE_BYTES,0);
-    //ジャンパークローズ(0)の場合はGSE
-    int Is_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
+    xTxQueue = xQueueCreate(TX_BUF_SIZE, sizeof(uint8_t));
+    xRxQueue = xQueueCreate(RX_BUF_SIZE, sizeof(uint8_t));
 
-    cmx_init(Is_gse);
+    //ジャンパークローズ(0)の場合はGSE
+    Is_gse_mode = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
+
+    //CMX869Bの初期化
+    cmx_init(Is_gse_mode);
+
+    // ********************************************************
+    // 待機処理
+    // ********************************************************
     // 割込(ISRからの通知)またはタイムアウトで起きてステータスを処理する
     // タイムアウトは割込の取りこぼし対策のポーリングを兼ねる
     // CMX869BへのSPIアクセスはこのタスクだけが行う
     TickType_t qam_last = xTaskGetTickCount();
     for (;;) {
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(CMX_POLL_MS));
+        //割込処理の実体
         cmx_service();
         // QAMステータスを定期的に読んでおく(SNR/Modeの監視用)
         if (xTaskGetTickCount() - qam_last >= pdMS_TO_TICKS(CMX_QAM_STATUS_MS)) {
@@ -58,6 +65,7 @@ void TaskCMX869BEntry(void *argument) {
         HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
     }
 }
+
 // QAMステータスの取得(TaskCMX869Bが定期的に読んだ値のコピーを返す。SPIアクセスはしない)
 void CMX869B_get_qam_status(uint8_t *mode, uint8_t *snr, uint8_t *msg) {
     QamStatusRegType s;
@@ -73,38 +81,65 @@ void CMX869B_flush_Tx() {
 }
 // 1文字送信(送信バッファに詰めて送信開始)
 void CMX869B_putc(uint8_t tx_data) {
-    xStreamBufferSend(xStreamBufferTx, &tx_data, 1, pdMS_TO_TICKS(100));
     CMX869B_flush_Tx();
 }
 // 割込処理 (タスクに通知するだけ)
 void INT_CMX869B_ISR() {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
     if (hTaskCMX869B != NULL) {
         vTaskNotifyGiveFromISR(hTaskCMX869B, &xHigherPriorityTaskWoken);
     }
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 // ステータスを読んで送受信する。割込線が戻るまで繰り返す
-#define CMX_SERVICE_MAX_LOOP 8
 void cmx_service() {
+    uint8_t tx_buf[TX_BUF_SIZE]={0};
+    uint8_t rx_buf[RX_BUF_SIZE]={0};
+    static int txPtr=TX_BUF_SIZE, rxPtr=RX_BUF_SIZE;
     uint8_t tx_data, rx_data;
+    // ------------------------
+    // 割込通知後の処理
+    // ------------------------
+    //計測開始
+    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
+    //
     for (int i = 0; i < CMX_SERVICE_MAX_LOOP; i++) {
         // 先にEXTIを消す。以降のエッジは保留として残り、次の通知になる
         __HAL_GPIO_EXTI_CLEAR_IT(C_INT_Pin);
         StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
+        // ------------------------
         // TXレジスタがReadyなら書く
+        // ------------------------
         if (StatusReg.Bits.TxDataReady == 1) {
-            if (xStreamBufferReceive(xStreamBufferTx, &tx_data, 1, 0) == 1) {
-                cbus_write_data(tx_data);
+            //txPtrが端まで言っていたらキューの有無をしらべて、txPtr=0にする
+            if (txPtr == TX_BUF_SIZE) {
+                if (xQueueReceive(xTxQueue,&tx_data, 0) == pdPASS) {
+                    txPtr = 0;
+                }
+            }
+            //ポインタが端までいっていなければ送信
+            if (txPtr++ < TX_BUF_SIZE) {
+                cbus_write_data(tx_buf[txPtr++]);
             }
         }
+        // ------------------------
         // RXレジスタがReadyなら読む
+        // ------------------------
         if (StatusReg.Bits.RxDataReady == 1) {
             rx_data = cbus_read_data();
-            xStreamBufferSend(xStreamBufferRx, &rx_data, 1, 0);
+            //ポインタが端までいっていなければバッファに書く
+            if (rxPtr++<RX_BUF_SIZE) {
+                rx_buf[rxPtr++] = rx_data;
+            }
+            //パケットが終了ならキューに書き込んでrxPtr=0に戻す
+            if (StatusReg.Bits.FCS==1) {
+                xQueueSend(xRxQueue, rx_buf, 0);
+                rxPtr = 0;
+            }
         }
+        // ------------------------
         //割込線が戻っていれば終了
+        // ------------------------
         if (HAL_GPIO_ReadPin(C_INT_GPIO_Port, C_INT_Pin) == GPIO_PIN_SET) break;
     }
 }
@@ -114,7 +149,7 @@ void cmx_service() {
 //-----------------
 //初期化
 //-----------------
-void cmx_init(int is_gse) {
+void cmx_init(int is_gse_mode) {
     static int is_loop_back = 1;
     static int is_Cal = 0;
     static uint8_t c = 0;
@@ -158,14 +193,14 @@ void cmx_init(int is_gse) {
             while (1);
         }
     } else {
-        if (is_gse) {
+        if (is_gse_mode) {
             set_qam_call();
         } else {
             set_qam_answer();
         }
         //ハンドシェーク監視
         for (uint8_t tic = 0; tic < 60; tic++) {
-            qam_monitor(is_gse, tic);
+            qam_monitor(is_gse_mode, tic);
         }
     }
     GRE.Bits.IrqMask = 0b001001;

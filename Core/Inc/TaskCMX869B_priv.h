@@ -143,7 +143,7 @@ uint16_t cbus_read_reg(uint8_t adr);
 uint8_t cbus_read_data(void);
 //
 void qam_monitor(int is_gse, int tic);
-void cmx_init(int is_gse);
+void cmx_init(int is_gse_mode);
 void cmx_service(void);
 void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len);
 void set_bell(void);

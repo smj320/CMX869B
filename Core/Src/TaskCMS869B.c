@@ -21,42 +21,50 @@ QamStatusRegType QamStatusReg = {0};
 StreamBufferHandle_t xStreamBufferTx;
 StreamBufferHandle_t xStreamBufferRx;
 
+int Is_gse = 0;
+
 // ****************************************************
 // Externで外部に出す関数
 // ****************************************************
 // タスクの実体
 #define STREAM_BUFFER_SIZE_BYTES 20
 #define CMX_POLL_MS 5
+#define CMX_QAM_STATUS_MS 200
 static TaskHandle_t hTaskCMX869B = NULL;
+// 他タスク参照用のQAMステータスのコピー(16bitなので読み書きはアトミック)
+static volatile uint16_t qam_status_word = 0;
 void TaskCMX869BEntry(void *argument) {
     hTaskCMX869B = xTaskGetCurrentTaskHandle();
     // Stream Bufferの作成
-    static uint8_t ucTxBuffer[STREAM_BUFFER_SIZE_BYTES];
-    static uint8_t ucRxBuffer[STREAM_BUFFER_SIZE_BYTES];
-    static StaticStreamBuffer_t xStreamBufferStructTx;
-    static StaticStreamBuffer_t xStreamBufferStructRx;
-    xStreamBufferTx = xStreamBufferCreateStatic(
-        STREAM_BUFFER_SIZE_BYTES,
-        1, // トリガーレベル
-        ucTxBuffer,
-        &xStreamBufferStructTx);
-    xStreamBufferRx = xStreamBufferCreateStatic(
-        STREAM_BUFFER_SIZE_BYTES,
-        1, // トリガーレベル
-        ucRxBuffer,
-        &xStreamBufferStructRx);
+    xStreamBufferTx = xStreamBufferCreate(STREAM_BUFFER_SIZE_BYTES,0);
+    xStreamBufferRx = xStreamBufferCreate(STREAM_BUFFER_SIZE_BYTES,0);
     //ジャンパークローズ(0)の場合はGSE
-    int is_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
+    int Is_gse = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
 
-    cmx_init(is_gse);
+    cmx_init(Is_gse);
     // 割込(ISRからの通知)またはタイムアウトで起きてステータスを処理する
     // タイムアウトは割込の取りこぼし対策のポーリングを兼ねる
     // CMX869BへのSPIアクセスはこのタスクだけが行う
+    TickType_t qam_last = xTaskGetTickCount();
     for (;;) {
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(CMX_POLL_MS));
         cmx_service();
+        // QAMステータスを定期的に読んでおく(SNR/Modeの監視用)
+        if (xTaskGetTickCount() - qam_last >= pdMS_TO_TICKS(CMX_QAM_STATUS_MS)) {
+            qam_last = xTaskGetTickCount();
+            QamStatusReg.Word = cbus_read_reg(QamStatusReg_ADDR);
+            qam_status_word = QamStatusReg.Word;
+        }
         HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
     }
+}
+// QAMステータスの取得(TaskCMX869Bが定期的に読んだ値のコピーを返す。SPIアクセスはしない)
+void CMX869B_get_qam_status(uint8_t *mode, uint8_t *snr, uint8_t *msg) {
+    QamStatusRegType s;
+    s.Word = qam_status_word;
+    *mode = s.Bits.Mode;
+    *snr = s.Bits.SNR;
+    *msg = s.Bits.Messages;
 }
 // 送信バッファに詰めたデータの送信開始
 // TXレジスタが空のままだとTxDataReadyの割込は来ないので、タスクを起こして書かせる
@@ -112,7 +120,7 @@ void cmx_init(int is_gse) {
     static uint8_t c = 0;
 
     // 動作モード選択
-    is_loop_back = 1;
+    is_loop_back = 0;
     is_Cal = 0;
 
     // SPIイネーブル
@@ -171,6 +179,7 @@ void cmx_init(int is_gse) {
 // TaskCMX869Bからのみ呼ぶこと(ISR・他タスクからは呼ばない)
 void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len) {
     //CS Low
+    taskENTER_CRITICAL();
     C_CS_GPIO_Port->BSRR = C_CS_Pin << 16;
     // 2. 3バイト分をダイレクトに送受信する（例としてSPI1を使用）
     for (int i = 0; i < len; i++) {
@@ -186,6 +195,7 @@ void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len) {
     }
     //CS High
     C_CS_GPIO_Port->BSRR = C_CS_Pin;
+    taskEXIT_CRITICAL();
 }
 
 void cbus_write_reg(uint8_t adr, uint16_t data) {
@@ -244,16 +254,16 @@ void qam_monitor(int is_gse, int tic) {
 
 // ==========================================
 // モデムモード
-// ==========================================
-#define TX_LEVEL 0b111
-#define RX_LEVEL 0b111
+// ==================================    uint8_t TX_LEVEL;
+#define TX_LEVEL 0b101;
+#define RX_LEVEL 0b111;
 
 void set_bell() {
     // TX
     TxReg.Bits.TxMode = TxReg_Mode_BELL;
     TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
-    TxReg.Bits.DataBits = 0b110; //8bit Stop1
+    TxReg.Bits.DataBits = 0b111; //8bit Stop2
     //TxReg.Bits.StartStop = 0b11; //Special Mode
     //TxReg.Bits.DataBits = 0b110; //HDLC Mode
     cbus_write_reg(TxReg_ADDR, TxReg.Word);
@@ -273,7 +283,7 @@ void set_qam_answer() {
     TxReg.Bits.TxMode = TxReg_Mode_QAM_AUTO;
     TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
-    TxReg.Bits.DataBits = 0b110; //8bit Stop1
+    TxReg.Bits.DataBits = 0b111; //8bit Stop2 (Stop1で文字が隙間なく連続すると相手側で化けるため)
     cbus_write_reg(TxReg_ADDR, TxReg.Word);
     HAL_Delay(10);
     // RX
@@ -285,6 +295,8 @@ void set_qam_answer() {
     HAL_Delay(10);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
+    //QamReg.Bits.br = QamMaxBR_12000;
+    //QamReg.Bits.br = QamMaxBR_9600;
     //QamReg.Bits.br = QamMaxBR_2400;
     QamReg.Bits.command = QamAnswer;
     QamReg.Bits.zeros = QamZeros;
@@ -297,7 +309,7 @@ void set_qam_call() {
     TxReg.Bits.TxMode = TxReg_Mode_QAM_AUTO;
     TxReg.Bits.TxLevel = TX_LEVEL;
     TxReg.Bits.StartStop = 0b10; //Start-stop, NonParity
-    TxReg.Bits.DataBits = 0b110; //8bit Stop1
+    TxReg.Bits.DataBits = 0b111; //8bit Stop2 (Stop1で文字が隙間なく連続すると相手側で化けるため)
     cbus_write_reg(TxReg_ADDR, TxReg.Word);
     HAL_Delay(10);
     // RX
@@ -309,6 +321,8 @@ void set_qam_call() {
     HAL_Delay(10);
     //QAM
     QamReg.Bits.br = QamMaxBR_14400;
+    //QamReg.Bits.br = QamMaxBR_12000;
+    //QamReg.Bits.br = QamMaxBR_9600;
     //QamReg.Bits.br = QamMaxBR_2400;
     QamReg.Bits.command = QamCall;
     QamReg.Bits.zeros = QamZeros;

@@ -18,7 +18,9 @@ QamRegType QamReg = {0};
 QamStatusRegType QamStatusReg = {0};
 
 QueueHandle_t xQueueTx = NULL;
-QueueHandle_t xQueueRx = NULL;
+QueueHandle_t xQueueRxHK = NULL;
+QueueHandle_t xQueueRxIMG = NULL;
+QueueHandle_t xQueueRxCMD = NULL;
 
 int Is_gse_mode = 0;
 
@@ -36,8 +38,8 @@ static volatile uint16_t qam_status_word = 0;
 void TaskCMX869BEntry(void *argument) {
     hTaskCMX869B = xTaskGetCurrentTaskHandle();
     // パケット単位のキューの作成(1要素 = 1パケット)
-    xQueueTx = xQueueCreate(PKT_QUEUE_DEPTH, TX_BUF_SIZE);
-    xQueueRx = xQueueCreate(PKT_QUEUE_DEPTH, RX_BUF_SIZE);
+    xQueueTx = xQueueCreate(PKT_QUEUE_DEPTH, TX_Q_SIZE);
+    xQueueRxHK = xQueueCreate(PKT_QUEUE_DEPTH, RX_Q_SIZE);
 
     //ジャンパークローズ(0)の場合はGSE
     Is_gse_mode = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
@@ -99,9 +101,9 @@ void INT_CMX869B_ISR() {
 }
 // ステータスを読んで送受信する。割込線が戻るまで繰り返す
 void cmx_service() {
-    static uint8_t tx_buf[TX_BUF_SIZE];
-    static uint8_t rx_buf[RX_BUF_SIZE];
-    static int txPtr=TX_BUF_SIZE, rxPtr=RX_BUF_SIZE;
+    static uint8_t tx_buf[TX_Q_SIZE];
+    static uint8_t rx_buf[RX_Q_SIZE];
+    static int txPtr=TX_Q_SIZE, rxPtr=RX_Q_SIZE;
     uint8_t rx_data;
     // ------------------------
     // 割込通知後の処理
@@ -118,13 +120,13 @@ void cmx_service() {
         // ------------------------
         if (StatusReg.Bits.TxDataReady == 1) {
             //txPtrが端まで言っていたらキューの有無をしらべて、txPtr=0にする
-            if (txPtr == TX_BUF_SIZE) {
+            if (txPtr == TX_Q_SIZE) {
                 if (xQueueReceive(xQueueTx,tx_buf, 0) == pdPASS) {
                     txPtr = 0;
                 }
             }
             //ポインタが端までいっていなければ送信
-            if (txPtr < TX_BUF_SIZE) {
+            if (txPtr < TX_Q_SIZE) {
                 cbus_write_data(tx_buf[txPtr++]);
             }
         }
@@ -134,12 +136,16 @@ void cmx_service() {
         if (StatusReg.Bits.RxDataReady == 1) {
             rx_data = cbus_read_data();
             //ポインタが端までいっていなければバッファに書く
-            if (rxPtr<RX_BUF_SIZE) {
+            if (rxPtr<RX_Q_SIZE) {
                 rx_buf[rxPtr++] = rx_data;
             }
             //パケットが終了ならキューに書き込んでrxPtr=0に戻す
+            //このときフレームが壊れていればcontrolに書く
             if (StatusReg.Bits.FCS==1) {
-                xQueueSend(xQueueRx, rx_buf, 0);
+                if (StatusReg.Bits.FrameError == 1) {
+                    ((HDLCControlType *)&tx_buf[0])->Bits.status = HDLC_ST_ABORT;
+                }
+                xQueueSend(xQueueRxHK, rx_buf, 0);
                 rxPtr = 0;
             }
         }

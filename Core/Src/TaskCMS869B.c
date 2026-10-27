@@ -65,11 +65,11 @@ void TaskCMX869BEntry(void *argument) {
 // ********************************************************
 // QAMステータスの取得(TaskCMX869Bが定期的に読んだ値のコピーを返す。SPIアクセスはしない)
 void CMX869B_get_qam_status(uint8_t *mode, uint8_t *snr, uint8_t *msg) {
-    QamStatusRegType s;
-    s.Word = qam_status_word;
-    *mode = s.Bits.Mode;
-    *snr = s.Bits.SNR;
-    *msg = s.Bits.Messages;
+    //QAMのステータを取る
+    QamStatusReg.Word = cbus_read_reg(QamStatusReg_ADDR);
+    *mode = QamStatusReg.Bits.Mode;
+    *snr = QamStatusReg.Bits.SNR;
+    *msg = QamStatusReg.Bits.Messages;
 }
 
 // 1文字送信(送信バッファに詰めて送信開始)
@@ -117,8 +117,11 @@ void cmx_service() {
         //このときフレームが壊れていればcontrolに書く
         if (StatusReg.Bits.FCS == 1) {
             if (StatusReg.Bits.FrameError == 1) {
-                ((HDLCControlType *) &rx_buf[0])->Bits.status = HDLC_ST_ABORT;
+                ((HDLCControlType *) &rx_buf[0])->Bits.isAbort = 1;
+            }else {
+                ((HDLCControlType *) &rx_buf[0])->Bits.isAbort = 0;
             }
+
             xQueueSend(xQueueRxHK, rx_buf, 0);
             rxPtr = 0;
         }
@@ -207,7 +210,7 @@ void set_bps(uint8_t mode) {
     }
 
     // この tim2_clock を使って 14400Hz の計算をする
-    uint32_t booClk = (TIM_CLK/target_freq);  ;
+    uint32_t booClk = (TIM_CLK / target_freq);;
     // 4bitの時間おきにポーリングにいく
     __HAL_TIM_SET_AUTORELOAD(&htim2, booClk*4-1);
 

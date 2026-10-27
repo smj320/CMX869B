@@ -22,17 +22,13 @@
 #define HDLC_ADDR_CMD 0b01
 #define HDLC_ADDR_IMG 0b10
 //
-#define HDLC_ST_SINGLE 0b000
-#define HDLC_ST_HEAD 0b001
-#define HDLC_ST_MIDDLE 0b010
-#define HDLC_ST_LAST 0b011
-#define HDLC_ST_ABORT 0b111
 typedef union {
     uint8_t Byte;
     struct {
+        uint8_t cnt: 4; // b0 シーケンスカウンタ
         uint8_t addr: 2; //宛先アドレス
-        uint8_t status: 3; //000; single 001 head, 010: middle, 011:last, 111 abort
-        uint8_t cnt: 3; //シーケンスカウンタ
+        uint8_t isAbort: 1; //
+        uint8_t isSingle: 1; //
     } Bits;
 } HDLCControlType;
 

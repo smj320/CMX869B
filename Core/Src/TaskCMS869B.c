@@ -23,6 +23,7 @@ QueueHandle_t xQueueRxIMG = NULL;
 QueueHandle_t xQueueRxCMD = NULL;
 
 int Is_gse_mode = 0;
+uint32_t N_poll_1sec = 0;
 
 // ****************************************************
 // Externで外部に出す関数
@@ -36,8 +37,8 @@ static volatile uint16_t qam_status_word = 0;
 
 void TaskCMX869BEntry(void *argument) {
     // パケット単位のキューの作成(1要素 = 1パケット)
-    xQueueTx = xQueueCreate(PKT_QUEUE_DEPTH, TX_Q_SIZE);
-    xQueueRxHK = xQueueCreate(PKT_QUEUE_DEPTH, RX_Q_SIZE);
+    xQueueTx = xQueueCreate(PKT_QUEUE_DEPTH, sizeof(xQueuePacketType));
+    xQueueRxHK = xQueueCreate(PKT_QUEUE_DEPTH, sizeof(xQueuePacketType));
 
     //ジャンパークローズ(0)の場合はGSE
     Is_gse_mode = HAL_GPIO_ReadPin(MODEM_MODE_GPIO_Port, MODEM_MODE_Pin) == 0 ? 1 : 0;
@@ -66,7 +67,6 @@ void TaskCMX869BEntry(void *argument) {
 // QAMステータスの取得(TaskCMX869Bが定期的に読んだ値のコピーを返す。SPIアクセスはしない)
 void CMX869B_get_qam_status(uint8_t *mode, uint8_t *snr, uint8_t *msg) {
     //QAMのステータを取る
-    QamStatusReg.Word = cbus_read_reg(QamStatusReg_ADDR);
     *mode = QamStatusReg.Bits.Mode;
     *snr = QamStatusReg.Bits.SNR;
     *msg = QamStatusReg.Bits.Messages;
@@ -78,53 +78,59 @@ void CMX869B_putc(uint8_t tx_data) {
 }
 // ステータスを読んで送受信する。割込線が戻るまで繰り返す
 void cmx_service() {
-    static uint8_t tx_buf[TX_Q_SIZE];
-    static uint8_t rx_buf[RX_Q_SIZE];
-    static int txPtr = TX_Q_SIZE, rxPtr = RX_Q_SIZE;
-    uint8_t rx_data;
-    // ------------------------
-    // 割込通知後の処理
-    // ------------------------
+    static int count = 0;
+    static xQueuePacketType txQ;
+    // 受信は関数呼び出しをまたいで1フレーム分ためるのでstaticにする
+    static uint8_t rxBuffer[HDLC_HEADER_SIZE + Q_DATA_SIZE + FSC_SIZE];
+    static int rxPtr = 0;
+    static int txPtr = HDLC_HEADER_SIZE + Q_DATA_SIZE;
+
     //計測開始
-    //HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_SET);
     //
+    //ステータス確認
     StatusReg.Word = cbus_read_reg(StatusReg_ADDR);
+    //
     // ------------------------
     // TXレジスタがReadyならデバイスに書く
     // ------------------------
     if (StatusReg.Bits.TxDataReady == 1) {
-        //txPtrが端まで言っていたらキューの有無をしらべて、txPtr=0にする
-        if (txPtr == TX_Q_SIZE) {
-            if (xQueueReceive(xQueueTx, tx_buf, 0) == pdPASS) {
+        //txPtrがxQTxの端まで言っていたらキューの有無をしらべて、txPtr=0にする
+        if (txPtr == HDLC_HEADER_SIZE + Q_DATA_SIZE) {
+            if (xQueueReceive(xQueueTx, &txQ, 0) == pdPASS) {
                 txPtr = 0;
             }
         }
-        //ポインタが端までいっていなければ送信
-        if (txPtr < TX_Q_SIZE) {
-            cbus_write_data(tx_buf[txPtr++]);
+        //端までいっていなければ送信
+        if (txPtr < HDLC_HEADER_SIZE + Q_DATA_SIZE) {
+            cbus_write_data(((uint8_t *) &txQ)[txPtr++]);
         }
     }
     // ------------------------
     // RXレジスタがReadyなら読む
     // ------------------------
     if (StatusReg.Bits.RxDataReady == 1) {
-        rx_data = cbus_read_data();
+        uint8_t rx_data = cbus_read_data();
         //ポインタが端までいっていなければバッファに書く
-        if (rxPtr < RX_Q_SIZE) {
-            rx_buf[rxPtr++] = rx_data;
+        if (rxPtr < HDLC_HEADER_SIZE + Q_DATA_SIZE + FSC_SIZE) {
+            rxBuffer[rxPtr++] = rx_data;
         }
         //パケットが終了ならキューに書き込んでrxPtr=0に戻す
         //このときフレームが壊れていればcontrolに書く
         if (StatusReg.Bits.FCS == 1) {
-            if (StatusReg.Bits.FrameError == 1) {
-                ((HDLCControlType *) &rx_buf[0])->Bits.isAbort = 1;
-            }else {
-                ((HDLCControlType *) &rx_buf[0])->Bits.isAbort = 0;
-            }
-
-            xQueueSend(xQueueRxHK, rx_buf, 0);
+            xQueuePacketType rxQ;
+            memcpy(&rxQ, rxBuffer, HDLC_HEADER_SIZE + Q_DATA_SIZE);
+            rxQ.control.isAbort = StatusReg.Bits.FrameError;
+            xQueueSend(xQueueRxHK, &rxQ, 0);
             rxPtr = 0;
         }
+    }
+    // 計測終了
+    HAL_GPIO_WritePin(CPU_MON_GPIO_Port, CPU_MON_Pin, GPIO_PIN_RESET);
+    // 一秒に一回更新
+    if (count++ == N_poll_1sec) {
+        QamStatusReg.Word = cbus_read_reg(QamStatusReg_ADDR);
+        count = 0;
     }
 }
 // ****************************************************
@@ -210,9 +216,11 @@ void set_bps(uint8_t mode) {
     }
 
     // この tim2_clock を使って 14400Hz の計算をする
-    uint32_t booClk = (TIM_CLK / target_freq);;
+    uint32_t booClk = (TIM_CLK / target_freq);
+    // booClkがbpsに相当するので、このルーチンをbClk回抜けると1秒になる
+    N_poll_1sec = booClk*3;
     // 4bitの時間おきにポーリングにいく
-    __HAL_TIM_SET_AUTORELOAD(&htim2, booClk*4-1);
+    __HAL_TIM_SET_AUTORELOAD(&htim2, booClk*3-1);
 
     //割込開始
     HAL_TIM_Base_Start_IT(&htim2);

@@ -9,28 +9,35 @@
 #include "queue.h"
 
 // ***********************************************************
-// 各種バッファサイズ
+// 各種定義
 // ***********************************************************
-#define CMX_SERVICE_MAX_LOOP 8
-#define TX_Q_SIZE 81
-#define RX_Q_SIZE 83
+#define HDLC_HEADER_SIZE 3 // control, count, len
+#define Q_DATA_SIZE 80
+#define FSC_SIZE 2
 
-// ***********************************************************
-// 変数
-// ***********************************************************
 #define HDLC_ADDR_HK 0b00
 #define HDLC_ADDR_CMD 0b01
 #define HDLC_ADDR_IMG 0b10
 //
-typedef union {
-    uint8_t Byte;
-    struct {
-        uint8_t cnt: 4; // b0 シーケンスカウンタ
-        uint8_t addr: 2; //宛先アドレス
-        uint8_t isAbort: 1; //
-        uint8_t isSingle: 1; //
-    } Bits;
+#define HDLC_POS_HEAD 0b00
+#define HDLC_POS_BODY 0b01
+#define HDLC_POS_TAIL 0b10
+#define HDLC_POS_SINGLE 0b11
+
+typedef struct {
+    uint8_t addr: 4; // 宛先アドレス
+    uint8_t pos: 2;  // HEAD 0b00, ... SINGLE 0b11
+    uint8_t isAbort: 1; // 亜ボードパケット
+    uint8_t dummy: 1; //
 } HDLCControlType;
+
+typedef struct {
+    HDLCControlType control;
+    uint8_t count;
+    uint8_t len;
+    uint8_t data[Q_DATA_SIZE];
+} xQueuePacketType;
+_Static_assert(sizeof(xQueuePacketType) == HDLC_HEADER_SIZE + Q_DATA_SIZE, "HDLC_HEADER_SIZE mismatch");
 
 extern QueueHandle_t xQueueTx;
 extern QueueHandle_t xQueueRxHK;

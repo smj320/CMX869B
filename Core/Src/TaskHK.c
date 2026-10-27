@@ -23,33 +23,31 @@ void TaskHKEntry(void *argument) {
     int f_error = 0;
     uint8_t tx_data[TX_Q_SIZE] = {0};
     for (;;) {
-        if (Is_gse_mode == 0) {
-            // 処理開始
-            xprintf("%04d HK:\r\n", cnt);
-            // データを編集する。
-            hdlc_control.Bits.addr = HDLC_ADDR_HK;
-            hdlc_control.Bits.status = HDLC_ST_SINGLE;
-            hdlc_control.Bits.cnt = cnt&0b111;
-            tx_data[0] = hdlc_control.Byte;
-            for (int i = 1; i < TX_Q_SIZE; i++) {
-                tx_data[i] = cnt;
-            }
-            xQueueSend(xQueueTx, tx_data, 0);
-            CMX869B_flush_Tx();
-        }else {
-            // 読む
-            if (xQueueReceive(xQueueRxHK, rx_buf, pdMS_TO_TICKS(1500))==pdPASS){
-                if (((HDLCControlType *)&rx_buf[0])->Bits.status == HDLC_ST_ABORT) {
-                    f_error++;
-                }
-                for (int i = 0; i < RX_Q_SIZE; i++) {
-                    xprintf("%02X ", rx_buf[i]);
-                }
-                xprintf("\r\n");
-            }else {
-                xprintf("TimeOut\r\n");
-            }
+        // 処理開始
+        xprintf("%04d HK:\r\n", cnt);
+        // データを編集する。
+        hdlc_control.Bits.addr = HDLC_ADDR_HK;
+        hdlc_control.Bits.status = HDLC_ST_SINGLE;
+        hdlc_control.Bits.cnt = cnt & 0b111;
+        tx_data[0] = hdlc_control.Byte;
+        for (int i = 1; i < TX_Q_SIZE; i++) {
+            tx_data[i] = cnt;
         }
+        xQueueSend(xQueueTx, tx_data, 0);
+        osDelay(200);
+        // 読む
+        if (xQueueReceive(xQueueRxHK, rx_buf, pdMS_TO_TICKS(1500)) == pdPASS) {
+            if (((HDLCControlType *) &rx_buf[0])->Bits.status == HDLC_ST_ABORT) {
+                f_error++;
+            }
+            for (int i = 0; i < RX_Q_SIZE; i++) {
+                xprintf("%02X ", rx_buf[i]);
+            }
+            xprintf("\r\n");
+        } else {
+            xprintf("TimeOut\r\n");
+        }
+
         // 回線状態の表示(受信バイト数とQAMステータス)
         uint8_t mode, snr, msg;
         CMX869B_get_qam_status(&mode, &snr, &msg);

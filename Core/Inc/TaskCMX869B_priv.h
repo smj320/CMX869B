@@ -149,6 +149,7 @@ void cbus_read_write(const uint8_t tx_data[], uint8_t rx_data[], int len);
 void set_bell(void);
 void set_qam_call(void);
 void set_qam_answer(void);
+void set_bps(uint8_t mode);
 //
 void int_log(int count);
 
